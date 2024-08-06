@@ -71,7 +71,7 @@ pub async fn handle_pump_buy(
         "handling pump buy req {}",
         serde_json::to_string_pretty(&pump_buy_request)?
     );
-    let lamports = 100_000;
+    let lamports = 1_000_000;
     let tip = 100_000;
     let mint = pump_buy_request.mint;
     let pump_buy_request = pump_buy_request.clone();

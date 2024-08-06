@@ -109,7 +109,7 @@ pub async fn mint_to_pump_accounts(
 pub async fn get_tokens_held(
     owner: &Pubkey,
 ) -> Result<Vec<PumpTokenData>, Box<dyn Error>> {
-    let url = "https://frontend-api.pump.fun/balances/{}?limit=100&offset=0";
+    let url = "https://frontend-api.pump.fun/balances/{}?limit=200&offset=0";
     let url = url.replace("{}", &owner.to_string());
     Ok(reqwest::get(&url)
         .await?

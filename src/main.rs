@@ -280,6 +280,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let rpc_client = RpcClient::new(env("RPC_URL").to_string());
             let pump_tokens =
                 pump::get_tokens_held(&keypair.pubkey()).await?;
+            info!("Tokens held: {}", pump_tokens.len());
             for pump_token in pump_tokens {
                 let mint = Pubkey::from_str(&pump_token.mint)?;
                 let pump_accounts =
@@ -293,11 +294,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     );
                     let actual_balance = match rpc_client
                         .get_token_account_balance(&ata)
-                        .await?
-                        .amount
-                        .parse::<u64>()
+                        .await
                     {
-                        Ok(balance) => balance,
+                        Ok(res) => res
+                            .amount
+                            .parse::<u64>()
+                            .expect("balance: parse u64"),
                         Err(_) => {
                             warn!("No balance found for {}", mint);
                             0
