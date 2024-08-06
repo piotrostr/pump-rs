@@ -291,11 +291,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         &keypair.pubkey(),
                         &mint,
                     );
-                    let actual_balance = rpc_client
+                    let actual_balance = match rpc_client
                         .get_token_account_balance(&ata)
                         .await?
                         .amount
-                        .parse::<u64>()?;
+                        .parse::<u64>()
+                    {
+                        Ok(balance) => balance,
+                        Err(_) => {
+                            warn!("No balance found for {}", mint);
+                            0
+                        }
+                    };
                     if actual_balance > 0 {
                         info!(
                             "Selling {} of {}",
