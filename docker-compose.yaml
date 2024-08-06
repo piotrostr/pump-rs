@@ -1,6 +1,7 @@
 services:
   listener:
     image: piotrostr/pump-ts
+    platform: linux/amd64
     build:
       context: ../pump-ts
       dockerfile: ../pump-ts/Dockerfile
@@ -15,6 +16,7 @@ services:
       - sniper
   sniper:
     image: piotrostr/pump-rs
+    platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile
