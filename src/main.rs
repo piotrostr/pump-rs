@@ -1,6 +1,7 @@
 use anstream::println;
 use chrono::Local;
 use env_logger::Builder;
+use futures::future::join_all;
 use jito_searcher_client::get_searcher_client;
 use log::LevelFilter;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
@@ -52,63 +53,118 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     match app.command {
         Command::Analyze { wallet_path } => {
-            let keypair =
-                Keypair::read_from_file(wallet_path).expect("read wallet");
-            let rpc_client = RpcClient::new(env("RPC_URL").to_string());
+            let keypair = Keypair::read_from_file(wallet_path)
+                .expect("Failed to read wallet");
+            let rpc_client =
+                Arc::new(RpcClient::new(env("RPC_URL").to_string()));
             let pump_tokens =
                 pump::get_tokens_held(&keypair.pubkey()).await?;
             let sniper_signatures = rpc_client
                 .get_signatures_for_address(&keypair.pubkey())
                 .await?;
-            let sniper_signatures: HashSet<String> = HashSet::from_iter(
-                sniper_signatures
-                    .iter()
-                    .map(|sig| sig.signature.to_string()),
-            );
-            for pump_token in pump_tokens {
-                let token_transactions = rpc_client
-                    .get_signatures_for_address(&Pubkey::from_str(
-                        &pump_token.mint,
-                    )?)
-                    .await?;
-                let first_tx_sig = token_transactions.last().unwrap();
-                let first_tx = rpc_client
-                    .get_transaction_with_config(
-                        &Signature::from_str(&first_tx_sig.signature)?,
-                        RpcTransactionConfig {
-                            encoding: Some(UiTransactionEncoding::Json),
-                            commitment: None,
-                            max_supported_transaction_version: Some(0),
-                        },
-                    )
-                    .await?;
-                let tx_sniped = token_transactions.iter().find(|sig| {
-                    sniper_signatures.contains(&sig.signature.to_string())
-                });
-                if tx_sniped.is_none() {
-                    println!("No sniped tx found");
-                    continue;
-                }
-                let tx_sniped = tx_sniped.unwrap();
+            let sniper_signatures: Arc<HashSet<String>> =
+                Arc::new(HashSet::from_iter(
+                    sniper_signatures
+                        .iter()
+                        .map(|sig| sig.signature.to_string()),
+                ));
 
-                let json_tx = serde_json::to_value(&first_tx)?;
-                let is_mint_tx = json_tx["transaction"]["message"]
-                    ["accountKeys"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .any(|key| {
-                        key.as_str().unwrap() == PUMP_FUN_MINT_AUTHORITY
+            let results = pump_tokens.iter().map(|pump_token| {
+                let rpc_client = rpc_client.clone();
+                let sniper_signatures = sniper_signatures.clone();
+                let pump_token = pump_token.clone();
+                tokio::spawn(async move {
+                    let token_transactions = rpc_client
+                        .get_signatures_for_address(
+                            &Pubkey::from_str(&pump_token.mint)
+                                .expect("mint"),
+                        )
+                        .await
+                        .expect("get signatures");
+
+                    if token_transactions.is_empty() {
+                        println!(
+                            "No transactions found for {}",
+                            pump_token.mint
+                        );
+                        return u64::MAX;
+                    }
+
+                    let first_tx_sig = token_transactions.last().unwrap();
+                    let first_tx = rpc_client
+                        .get_transaction_with_config(
+                            &Signature::from_str(&first_tx_sig.signature)
+                                .expect("signature"),
+                            RpcTransactionConfig {
+                                encoding: Some(UiTransactionEncoding::Json),
+                                commitment: None,
+                                max_supported_transaction_version: Some(0),
+                            },
+                        )
+                        .await
+                        .expect("get transaction");
+
+                    let tx_sniped = token_transactions.iter().find(|sig| {
+                        sniper_signatures.contains(&sig.signature.to_string())
                     });
-                if !is_mint_tx {
-                    println!("No mint tx found");
-                    continue;
-                }
+
+                    if let Some(tx_sniped) = tx_sniped {
+                        let json_tx =
+                            serde_json::to_value(&first_tx).expect("to json");
+                        let is_mint_tx = json_tx["transaction"]["message"]
+                            ["accountKeys"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(|key| {
+                                key.as_str().unwrap()
+                                    == PUMP_FUN_MINT_AUTHORITY
+                            });
+
+                        if is_mint_tx {
+                            let slots_difference =
+                                tx_sniped.slot - first_tx.slot;
+                            println!(
+                                "{}: sniped in {} slots",
+                                pump_token.mint, slots_difference
+                            );
+                            slots_difference
+                        } else {
+                            println!(
+                                "No mint tx found for {}",
+                                pump_token.mint
+                            );
+                            u64::MAX
+                        }
+                    } else {
+                        println!(
+                            "No sniped tx found for {}",
+                            pump_token.mint
+                        );
+                        u64::MAX
+                    }
+                })
+            });
+
+            let results = join_all(results).await;
+            let valid_results: Vec<u64> = results
+                .into_iter()
+                .flatten()
+                .filter(|result| *result != u64::MAX)
+                .collect();
+
+            if !valid_results.is_empty() {
+                let total_slots: u64 = valid_results.iter().sum();
+                let average_slots =
+                    total_slots as f64 / valid_results.len() as f64;
+                println!("Total tokens analyzed: {}", pump_tokens.len());
                 println!(
-                    "{}: sniped in {} slots",
-                    pump_token.mint,
-                    tx_sniped.slot - first_tx.slot
+                    "Tokens successfully sniped: {}",
+                    valid_results.len()
                 );
+                println!("Average snipe slots: {:.2}", average_slots);
+            } else {
+                println!("No valid results to calculate average");
             }
         }
         Command::Sanity {} => {

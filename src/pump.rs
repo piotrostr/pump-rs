@@ -61,7 +61,7 @@ pub struct BondingCurveLayout {
     pub complete: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PumpTokenData {
     pub address: String,
     pub balance: u64,
