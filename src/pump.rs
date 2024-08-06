@@ -848,8 +848,8 @@ mod tests {
     #[tokio::test]
     async fn test_pump_bump() {
         dotenv::from_filename(".env").unwrap();
-        let wallet =
-            Keypair::read_from_file("./wtf.json").expect("read wallet");
+        let wallet = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
+            .expect("read wallet");
         let rpc_client =
             RpcClient::new("https://api.mainnet-beta.solana.com".to_string());
         let mint =
@@ -954,8 +954,8 @@ mod tests {
             .expect("parse associated user"),
             metadata: Pubkey::default(), // not required
         };
-        let wallet =
-            Keypair::read_from_file("./fuck.json").expect("read wallet");
+        let wallet = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
+            .expect("read wallet");
         let rpc_client =
             RpcClient::new("https://api.mainnet-beta.solana.com".to_string());
         let auth = Arc::new(
