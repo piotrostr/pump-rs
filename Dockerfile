@@ -1,4 +1,4 @@
-FROM rust:1.70 as builder
+FROM rust:1.79 as builder
 
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -16,8 +16,8 @@ RUN PROTOC_VERSION=$(curl -s https://api.github.com/repos/protocolbuffers/protob
     rm "protoc-${PROTOC_VERSION}-linux-x86_64.zip"
 
 # Copy manifests and build only the dependencies to cache them
-RUN USER=root cargo new --bin listen
-WORKDIR /listen
+RUN USER=root cargo new --bin pump-rs
+WORKDIR /pump-rs
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./Cargo.lock ./Cargo.lock
 
@@ -29,10 +29,9 @@ RUN rm src/*.rs
 COPY ./src ./src
 
 # Build for release
-RUN rm ./target/release/deps/listen*
 RUN cargo build --release
 
-FROM debian:bullseye-slim as runner
+FROM ubuntu:22.04 as runner
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
@@ -40,6 +39,6 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /listen/target/release/listen .
+COPY --from=builder /pump-rs/target/release/pump-rs .
 
-CMD ["./listen"]
+CMD ["./pump-rs", "sanity"]

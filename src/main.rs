@@ -45,6 +45,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::Sanity {} => {
+            let keypair = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
+                .expect("read wallet");
+            let auth = Keypair::read_from_file(env("AUTH_KEYPAIR_PATH"))
+                .expect("read auth");
+            let rpc_client = RpcClient::new(env("RPC_URL").to_string());
+            info!("Wallet: {}", keypair.pubkey());
+            let balance = rpc_client.get_balance(&keypair.pubkey()).await?;
+            info!("Balance: {}", balance);
+            info!("Auth: {}", auth.pubkey());
+            info!("RPC: {}", env("RPC_URL"));
+            info!("Block Engine: {}", env("BLOCK_ENGINE_URL"));
+        }
         Command::CloseTokenAccounts { wallet_path } => {
             let keypair =
                 Keypair::read_from_file(wallet_path).expect("read wallet");

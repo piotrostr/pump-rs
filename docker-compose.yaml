@@ -1,0 +1,24 @@
+services:
+  listener:
+    image: piotrostr/pump-ts
+    restart: always
+    healthcheck:
+      test: ["CMD", "bun", "run", "index.ts", "health"]
+      interval: 15s
+      start_period: 10s
+  sniper:
+    image: piotrostr/pump-rs
+    ports:
+      - "6969:6969"
+    restart: always
+    networks:
+      - default
+    volumes:
+      - .env:/.env
+      - ./FAST.json:/FAST.json
+      - ./auth.json:/auth.json
+    healthcheck:
+      test: ["CMD", "./pump-rs", "sanity"]
+      interval: 15s
+      start_period: 10s
+    command: ["./pump-rs", "pump-service"]

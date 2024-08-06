@@ -119,6 +119,13 @@ pub async fn handle_pump_buy(
     })))
 }
 
+#[get("/healthz")]
+pub async fn healthz() -> HttpResponse {
+    HttpResponse::Ok().json(json!({
+        "status": "im ok, hit me with pump stuff"
+    }))
+}
+
 pub async fn run_pump_service() -> std::io::Result<()> {
     // keep all of the state in the app state not to re-init
     let wallet = Arc::new(Mutex::new(
@@ -168,6 +175,7 @@ pub async fn run_pump_service() -> std::io::Result<()> {
         App::new()
             .service(handle_pump_buy)
             .service(get_blockhash)
+            .service(healthz)
             .app_data(app_state.clone())
     })
     .bind(("0.0.0.0", 6969))?
