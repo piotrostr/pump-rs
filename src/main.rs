@@ -1,7 +1,13 @@
+use anstream::println;
 use chrono::Local;
 use env_logger::Builder;
 use jito_searcher_client::get_searcher_client;
 use log::LevelFilter;
+use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
+use solana_client::rpc_config::RpcTransactionConfig;
+use solana_sdk::signature::Signature;
+use solana_transaction_status::UiTransactionEncoding;
+use std::collections::HashSet;
 use std::io::Write;
 use std::{error::Error, str::FromStr, sync::Arc, time::Duration};
 
@@ -45,6 +51,66 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::Analyze { wallet_path } => {
+            let keypair =
+                Keypair::read_from_file(wallet_path).expect("read wallet");
+            let rpc_client = RpcClient::new(env("RPC_URL").to_string());
+            let pump_tokens =
+                pump::get_tokens_held(&keypair.pubkey()).await?;
+            let sniper_signatures = rpc_client
+                .get_signatures_for_address(&keypair.pubkey())
+                .await?;
+            let sniper_signatures: HashSet<String> = HashSet::from_iter(
+                sniper_signatures
+                    .iter()
+                    .map(|sig| sig.signature.to_string()),
+            );
+            for pump_token in pump_tokens {
+                let token_transactions = rpc_client
+                    .get_signatures_for_address(&Pubkey::from_str(
+                        &pump_token.mint,
+                    )?)
+                    .await?;
+                let first_tx_sig = token_transactions.last().unwrap();
+                let first_tx = rpc_client
+                    .get_transaction_with_config(
+                        &Signature::from_str(&first_tx_sig.signature)?,
+                        RpcTransactionConfig {
+                            encoding: Some(UiTransactionEncoding::Json),
+                            commitment: None,
+                            max_supported_transaction_version: Some(0),
+                        },
+                    )
+                    .await?;
+                let tx_sniped = token_transactions.iter().find(|sig| {
+                    sniper_signatures.contains(&sig.signature.to_string())
+                });
+                if tx_sniped.is_none() {
+                    println!("No sniped tx found");
+                    continue;
+                }
+                let tx_sniped = tx_sniped.unwrap();
+
+                let json_tx = serde_json::to_value(&first_tx)?;
+                let is_mint_tx = json_tx["transaction"]["message"]
+                    ["accountKeys"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|key| {
+                        key.as_str().unwrap() == PUMP_FUN_MINT_AUTHORITY
+                    });
+                if !is_mint_tx {
+                    println!("No mint tx found");
+                    continue;
+                }
+                println!(
+                    "{}: sniped in {} slots",
+                    pump_token.mint,
+                    tx_sniped.slot - first_tx.slot
+                );
+            }
+        }
         Command::Sanity {} => {
             let keypair = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
                 .expect("read wallet");

@@ -15,6 +15,10 @@ pub struct Args {}
 
 #[derive(Debug, Parser)]
 pub enum Command {
+    Analyze {
+        #[arg(long)]
+        wallet_path: String,
+    },
     Sanity {},
     CloseTokenAccounts {
         #[arg(long)]
