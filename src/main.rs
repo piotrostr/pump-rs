@@ -26,7 +26,7 @@ use solana_sdk::{
     signature::Keypair,
     signer::{EncodableKey, Signer},
 };
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 
 use log::{info, warn};
 
@@ -69,80 +69,101 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         .map(|sig| sig.signature.to_string()),
                 ));
 
+            // Create a semaphore with 5 permits
+            let semaphore = Arc::new(Semaphore::new(5));
+
             let results = pump_tokens.iter().map(|pump_token| {
                 let rpc_client = rpc_client.clone();
                 let sniper_signatures = sniper_signatures.clone();
                 let pump_token = pump_token.clone();
+                let sem = semaphore.clone();
                 tokio::spawn(async move {
-                    let token_transactions = rpc_client
-                        .get_signatures_for_address(
-                            &Pubkey::from_str(&pump_token.mint)
-                                .expect("mint"),
-                        )
-                        .await
-                        .expect("get signatures");
+                    // Acquire a permit
+                    let _permit = sem.acquire().await.unwrap();
 
-                    if token_transactions.is_empty() {
-                        println!(
-                            "No transactions found for {}",
-                            pump_token.mint
-                        );
-                        return u64::MAX;
-                    }
+                    let result = async {
+                        let token_transactions = rpc_client
+                            .get_signatures_for_address(
+                                &Pubkey::from_str(&pump_token.mint)
+                                    .expect("mint"),
+                            )
+                            .await
+                            .expect("get signatures");
 
-                    let first_tx_sig = token_transactions.last().unwrap();
-                    let first_tx = rpc_client
-                        .get_transaction_with_config(
-                            &Signature::from_str(&first_tx_sig.signature)
-                                .expect("signature"),
-                            RpcTransactionConfig {
-                                encoding: Some(UiTransactionEncoding::Json),
-                                commitment: None,
-                                max_supported_transaction_version: Some(0),
-                            },
-                        )
-                        .await
-                        .expect("get transaction");
+                        if token_transactions.is_empty() {
+                            println!(
+                                "No transactions found for {}",
+                                pump_token.mint
+                            );
+                            return u64::MAX;
+                        }
 
-                    let tx_sniped = token_transactions.iter().find(|sig| {
-                        sniper_signatures.contains(&sig.signature.to_string())
-                    });
+                        let first_tx_sig = token_transactions.last().unwrap();
+                        let first_tx = rpc_client
+                            .get_transaction_with_config(
+                                &Signature::from_str(&first_tx_sig.signature)
+                                    .expect("signature"),
+                                RpcTransactionConfig {
+                                    encoding: Some(
+                                        UiTransactionEncoding::Json,
+                                    ),
+                                    commitment: None,
+                                    max_supported_transaction_version: Some(
+                                        0,
+                                    ),
+                                },
+                            )
+                            .await
+                            .expect("get transaction");
 
-                    if let Some(tx_sniped) = tx_sniped {
-                        let json_tx =
-                            serde_json::to_value(&first_tx).expect("to json");
-                        let is_mint_tx = json_tx["transaction"]["message"]
-                            ["accountKeys"]
-                            .as_array()
-                            .unwrap()
-                            .iter()
-                            .any(|key| {
-                                key.as_str().unwrap()
-                                    == PUMP_FUN_MINT_AUTHORITY
+                        let tx_sniped =
+                            token_transactions.iter().find(|sig| {
+                                sniper_signatures
+                                    .contains(&sig.signature.to_string())
                             });
 
-                        if is_mint_tx {
-                            let slots_difference =
-                                tx_sniped.slot - first_tx.slot;
-                            println!(
-                                "{}: sniped in {} slots",
-                                pump_token.mint, slots_difference
-                            );
-                            slots_difference
+                        if let Some(tx_sniped) = tx_sniped {
+                            let json_tx = serde_json::to_value(&first_tx)
+                                .expect("to json");
+                            let is_mint_tx = json_tx["transaction"]
+                                ["message"]["accountKeys"]
+                                .as_array()
+                                .unwrap()
+                                .iter()
+                                .any(|key| {
+                                    key.as_str().unwrap()
+                                        == PUMP_FUN_MINT_AUTHORITY
+                                });
+
+                            if is_mint_tx {
+                                let slots_difference =
+                                    tx_sniped.slot - first_tx.slot;
+                                println!(
+                                    "{}: sniped in {} slots",
+                                    pump_token.mint, slots_difference
+                                );
+                                slots_difference
+                            } else {
+                                println!(
+                                    "No mint tx found for {}",
+                                    pump_token.mint
+                                );
+                                u64::MAX
+                            }
                         } else {
                             println!(
-                                "No mint tx found for {}",
+                                "No sniped tx found for {}",
                                 pump_token.mint
                             );
                             u64::MAX
                         }
-                    } else {
-                        println!(
-                            "No sniped tx found for {}",
-                            pump_token.mint
-                        );
-                        u64::MAX
                     }
+                    .await;
+
+                    // Release the permit after 200ms (5 requests per second)
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+
+                    result
                 })
             });
 
