@@ -1,0 +1,32 @@
+[package]
+name = "pump-rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4.22"
+solana-client = "2.0.3"
+solana-sdk = "2.0.3"
+timed = "0.2.1"
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4.5.13", features = ["derive"] }
+serde = "1.0.204"
+serde_json = "1.0.122"
+jito-searcher-client = { git = "https://github.com/piotrostr/searcher-examples" }
+jito-protos = { git = "https://github.com/piotrostr/searcher-examples" }
+tonic = { version = "0.10", features = [
+  "tls",
+  "tls-roots",
+  "tls-webpki-roots",
+] }
+futures-util = "0.3.30"
+actix-web = "4.8.0"
+reqwest = { version = "0.12", features = ["json"] }
+spl-associated-token-account = "4.0.0"
+borsh = "1.5.1"
+solana-account-decoder = "2.0.3"
+solana-transaction-status = "2.0.3"
+spl-token = "6.0.0"
+dotenv = "0.15.0"
+env_logger = "0.11.5"
+chrono = "0.4.38"
