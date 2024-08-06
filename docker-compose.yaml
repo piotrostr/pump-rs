@@ -1,13 +1,23 @@
 services:
   listener:
     image: piotrostr/pump-ts
+    build:
+      context: ../pump-ts
+      dockerfile: ../pump-ts/Dockerfile
     restart: always
     healthcheck:
       test: ["CMD", "bun", "run", "index.ts", "health"]
       interval: 15s
       start_period: 10s
+    networks:
+      - default
+    depends_on:
+      - sniper
   sniper:
     image: piotrostr/pump-rs
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "6969:6969"
     restart: always
@@ -22,3 +32,8 @@ services:
       interval: 15s
       start_period: 10s
     command: ["./pump-rs", "pump-service"]
+    environment:
+      - RUST_LOG=info
+
+networks:
+  default:

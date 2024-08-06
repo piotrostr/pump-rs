@@ -120,7 +120,11 @@ pub async fn handle_pump_buy(
 }
 
 #[get("/healthz")]
-pub async fn healthz() -> HttpResponse {
+pub async fn healthz(request: actix_web::HttpRequest) -> HttpResponse {
+    info!(
+        "healthz from {}",
+        request.connection_info().peer_addr().unwrap_or("unknown")
+    );
     HttpResponse::Ok().json(json!({
         "status": "im ok, hit me with pump stuff"
     }))
