@@ -1,10 +1,10 @@
-use anstream::println;
 use chrono::Local;
 use env_logger::Builder;
 use futures::future::join_all;
 use jito_searcher_client::get_searcher_client;
 use log::LevelFilter;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
+use pump_rs::snipe::snipe;
 use solana_client::rpc_config::RpcTransactionConfig;
 use solana_sdk::signature::Signature;
 use solana_transaction_status::UiTransactionEncoding;
@@ -52,6 +52,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::Snipe { lamports } => {
+            snipe(lamports).await?;
+        }
         Command::Analyze { wallet_path } => {
             let keypair = Keypair::read_from_file(wallet_path)
                 .expect("Failed to read wallet");

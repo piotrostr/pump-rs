@@ -15,6 +15,10 @@ pub struct Args {}
 
 #[derive(Debug, Parser)]
 pub enum Command {
+    Snipe {
+        #[arg(long)]
+        lamports: u64,
+    },
     Analyze {
         #[arg(long)]
         wallet_path: String,
