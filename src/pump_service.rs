@@ -71,10 +71,38 @@ pub async fn handle_pump_buy(
         "handling pump buy req {}",
         serde_json::to_string_pretty(&pump_buy_request)?
     );
-    let lamports = 10_000_000;
+    let lamports = 50_000_000;
     let tip = 1_000_000;
     let mint = pump_buy_request.mint;
     let pump_buy_request = pump_buy_request.clone();
+    let wallet = state.wallet.lock().await;
+    let mut searcher_client = state.searcher_client.lock().await;
+    let latest_blockhash = state.latest_blockhash.lock().await;
+    _handle_pump_buy(
+        pump_buy_request,
+        lamports,
+        tip,
+        &wallet,
+        &mut searcher_client,
+        &latest_blockhash,
+    )
+    .await?;
+    Ok(HttpResponse::Ok().json(json!({
+    "status": format!(
+        "OK, trigerred buy of {}",
+        mint.to_string())
+    })))
+}
+
+#[timed::timed(duration(printer = "info!"))]
+pub async fn _handle_pump_buy(
+    pump_buy_request: PumpBuyRequest,
+    lamports: u64,
+    tip: u64,
+    wallet: &Keypair,
+    searcher_client: &mut SearcherClient,
+    latest_blockhash: &Hash,
+) -> Result<(), Box<dyn std::error::Error>> {
     let token_amount = pump::get_token_amount(
         pump_buy_request.virtual_sol_reserves,
         pump_buy_request.virtual_token_reserves,
@@ -82,9 +110,6 @@ pub async fn handle_pump_buy(
         lamports,
     )?;
     let token_amount = (token_amount as f64 * 0.8) as u64;
-    let wallet = state.wallet.lock().await;
-    let mut searcher_client = state.searcher_client.lock().await;
-    let latest_blockhash = state.latest_blockhash.lock().await;
     let mut ixs = pump::_make_buy_ixs(
         wallet.pubkey(),
         pump_buy_request.mint,
@@ -102,21 +127,17 @@ pub async fn handle_pump_buy(
         VersionedTransaction::from(Transaction::new_signed_with_payer(
             ixs.as_slice(),
             Some(&wallet.pubkey()),
-            &[&*wallet],
+            &[wallet],
             *latest_blockhash,
         ));
     let start = std::time::Instant::now();
-    let res = send_bundle_no_wait(&[swap_tx], &mut searcher_client)
+    let res = send_bundle_no_wait(&[swap_tx], searcher_client)
         .await
         .expect("send bundle no wait");
     let elapsed = start.elapsed();
     info!("Bundle sent in {:?}", elapsed);
     info!("Bundle sent. UUID: {}", res.into_inner().uuid);
-    Ok(HttpResponse::Ok().json(json!({
-    "status": format!(
-        "OK, trigerred buy of {}",
-        mint.to_string())
-    })))
+    Ok(())
 }
 
 #[get("/healthz")]
