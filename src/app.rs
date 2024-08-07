@@ -23,6 +23,9 @@ pub enum Command {
     CloseTokenAccounts {
         #[arg(long)]
         wallet_path: String,
+
+        #[clap(long, default_value = "false")]
+        burn: bool,
     },
     PumpService {},
     SellPump {

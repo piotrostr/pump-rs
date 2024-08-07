@@ -35,7 +35,10 @@ use crate::constants::{
     PUMP_BUY_METHOD, PUMP_FEE_ADDRESS, PUMP_FUN_PROGRAM, PUMP_GLOBAL_ADDRESS,
     PUMP_SELL_METHOD, RENT_PROGRAM, SYSTEM_PROGRAM_ID, TOKEN_PROGRAM,
 };
-use crate::util::{pubkey_to_string, string_to_pubkey, string_to_u64};
+use crate::util::{
+    make_compute_budget_ixs, pubkey_to_string, string_to_pubkey,
+    string_to_u64,
+};
 use jito_protos::searcher::searcher_service_client::SearcherServiceClient;
 use jito_searcher_client::token_authenticator::ClientInterceptor;
 use tonic::{codegen::InterceptedService, transport::Channel};
@@ -435,9 +438,14 @@ pub async fn sell_pump_token(
     );
 
     let recent_blockhash = rpc_client.get_latest_blockhash().await?;
+    let mut ixs = vec![];
+    let mut compute_budget_ixs = make_compute_budget_ixs(25_000, 262_500);
+    let sell_ix = make_pump_sell_ix(owner, pump_accounts, token_amount, ata)?;
+    ixs.append(&mut compute_budget_ixs);
+    ixs.push(sell_ix);
 
     let transaction = Transaction::new_signed_with_payer(
-        &[make_pump_sell_ix(owner, pump_accounts, token_amount, ata)?],
+        &ixs,
         Some(&owner),
         &[wallet],
         recent_blockhash,
@@ -447,7 +455,7 @@ pub async fn sell_pump_token(
         .send_transaction_with_config(
             &transaction,
             RpcSendTransactionConfig {
-                skip_preflight: true,
+                skip_preflight: false,
                 min_context_slot: None,
                 preflight_commitment: Some(CommitmentLevel::Processed),
                 max_retries: None,

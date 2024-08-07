@@ -1,4 +1,6 @@
 use serde::Deserialize;
+use solana_sdk::compute_budget::ComputeBudgetInstruction;
+use solana_sdk::instruction::Instruction;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 
@@ -7,7 +9,10 @@ pub fn env(var: &str) -> String {
 }
 
 /// Helper function for pubkey serialize
-pub fn pubkey_to_string<S>(pubkey: &Pubkey, serializer: S) -> Result<S::Ok, S::Error>
+pub fn pubkey_to_string<S>(
+    pubkey: &Pubkey,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
@@ -29,4 +34,14 @@ where
 {
     let s: String = Deserialize::deserialize(deserializer)?;
     s.parse().map_err(serde::de::Error::custom)
+}
+
+pub fn make_compute_budget_ixs(
+    price: u64,
+    max_units: u32,
+) -> Vec<Instruction> {
+    vec![
+        ComputeBudgetInstruction::set_compute_unit_price(price),
+        ComputeBudgetInstruction::set_compute_unit_limit(max_units),
+    ]
 }

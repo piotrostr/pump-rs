@@ -201,13 +201,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
             info!("RPC: {}", env("RPC_URL"));
             info!("Block Engine: {}", env("BLOCK_ENGINE_URL"));
         }
-        Command::CloseTokenAccounts { wallet_path } => {
+        Command::CloseTokenAccounts { wallet_path, burn } => {
+            info!("Burn: {}", burn);
             let keypair =
                 Keypair::read_from_file(wallet_path).expect("read wallet");
             info!("Wallet: {}", keypair.pubkey());
             let rpc_client =
                 Arc::new(RpcClient::new(env("RPC_URL").to_string()));
-            ata::close_all_atas(rpc_client, &keypair).await?;
+            ata::close_all_atas(rpc_client, &keypair, burn).await?;
         }
         Command::PumpService {} => {
             pump_service::run_pump_service().await?;
