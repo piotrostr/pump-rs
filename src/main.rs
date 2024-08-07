@@ -116,11 +116,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             .await
                             .expect("get transaction");
 
-                        let tx_sniped =
-                            token_transactions.iter().find(|sig| {
+                        let tx_sniped = token_transactions
+                            .iter()
+                            .filter(|sig| {
                                 sniper_signatures
                                     .contains(&sig.signature.to_string())
-                            });
+                            })
+                            .last();
 
                         if let Some(tx_sniped) = tx_sniped {
                             let json_tx = serde_json::to_value(&first_tx)

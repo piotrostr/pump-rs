@@ -71,8 +71,8 @@ pub async fn handle_pump_buy(
         "handling pump buy req {}",
         serde_json::to_string_pretty(&pump_buy_request)?
     );
-    let lamports = 1_000_000;
-    let tip = 100_000;
+    let lamports = 10_000_000;
+    let tip = 1_000_000;
     let mint = pump_buy_request.mint;
     let pump_buy_request = pump_buy_request.clone();
     let token_amount = pump::get_token_amount(
@@ -81,7 +81,7 @@ pub async fn handle_pump_buy(
         pump_buy_request.real_token_reserves,
         lamports,
     )?;
-    let token_amount = (token_amount as f64 * 0.7) as u64;
+    let token_amount = (token_amount as f64 * 0.8) as u64;
     let wallet = state.wallet.lock().await;
     let mut searcher_client = state.searcher_client.lock().await;
     let latest_blockhash = state.latest_blockhash.lock().await;
