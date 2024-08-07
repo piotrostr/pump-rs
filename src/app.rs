@@ -15,8 +15,13 @@ pub struct Args {}
 
 #[derive(Debug, Parser)]
 pub enum Command {
-    Bench {},
-    Snipe {
+    BenchPump {},
+    BenchPortal {},
+    SnipePortal {
+        #[arg(long)]
+        lamports: u64,
+    },
+    SnipePump {
         #[arg(long)]
         lamports: u64,
     },

@@ -8,6 +8,7 @@ use log::LevelFilter;
 use pump_rs::bench;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
 use pump_rs::snipe;
+use pump_rs::snipe_portal;
 use solana_client::rpc_config::RpcTransactionConfig;
 use solana_sdk::signature::Signature;
 use solana_transaction_status::UiTransactionEncoding;
@@ -55,11 +56,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
-        Command::Bench {} => {
+        Command::BenchPortal {} => {
+            info!("Benching portal connection");
+            bench::bench_pump_portal_connection().await?;
+        }
+        Command::BenchPump {} => {
+            info!("Benching pump connection");
             bench::bench_pump_connection().await?;
         }
-        Command::Snipe { lamports } => {
-            snipe::snipe(lamports).await?;
+        Command::SnipePortal { lamports } => {
+            info!("Sniping portal with {} lamports", lamports);
+            snipe_portal::snipe_portal(lamports).await?;
+        }
+        Command::SnipePump { lamports } => {
+            info!("Sniping pump with {} lamports", lamports);
+            snipe::snipe_pump(lamports).await?;
         }
         Command::Analyze { wallet_path } => {
             let keypair = Keypair::read_from_file(wallet_path)

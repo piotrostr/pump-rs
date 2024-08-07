@@ -222,7 +222,7 @@ pub async fn get_bonding_curve(
 pub fn get_token_amount(
     virtual_sol_reserves: u64,
     virtual_token_reserves: u64,
-    real_token_reserves: u64,
+    real_token_reserves: Option<u64>,
     lamports: u64,
 ) -> Result<u64, Box<dyn std::error::Error>> {
     let virtual_sol_reserves = virtual_sol_reserves as u128;
@@ -249,7 +249,11 @@ pub fn get_token_amount(
         .ok_or("Underflow in amount out calculation")?;
 
     let final_amount_out =
-        std::cmp::min(amount_out, real_token_reserves as u128);
+        if let Some(real_token_reserves) = real_token_reserves {
+            std::cmp::min(amount_out, real_token_reserves as u128)
+        } else {
+            amount_out
+        };
 
     Ok(final_amount_out as u64)
 }
@@ -275,10 +279,6 @@ pub struct PumpBuyRequest {
     pub virtual_token_reserves: u64,
     #[serde(deserialize_with = "string_to_u64")]
     pub virtual_sol_reserves: u64,
-    #[serde(deserialize_with = "string_to_u64")]
-    pub real_token_reserves: u64,
-    #[serde(deserialize_with = "string_to_u64")]
-    pub real_sol_reserves: u64,
 }
 
 pub async fn buy_pump_token(
@@ -296,7 +296,7 @@ pub async fn buy_pump_token(
     let token_amount = get_token_amount(
         bonding_curve.virtual_sol_reserves,
         bonding_curve.virtual_token_reserves,
-        bonding_curve.real_token_reserves,
+        Some(bonding_curve.real_token_reserves),
         lamports,
     )?;
 
@@ -757,7 +757,7 @@ pub async fn send_pump_bump(
     let token_amount = get_token_amount(
         bonding_curve.virtual_sol_reserves,
         bonding_curve.virtual_token_reserves,
-        bonding_curve.real_token_reserves,
+        Some(bonding_curve.real_token_reserves),
         lamports,
     )?;
     let token_amount = (token_amount as f64 * 0.9) as u64;
@@ -1043,7 +1043,7 @@ mod tests {
         let token_amount = get_token_amount(
             bonding_curve.virtual_sol_reserves,
             bonding_curve.virtual_token_reserves,
-            bonding_curve.real_token_reserves,
+            Some(bonding_curve.real_token_reserves),
             lamports,
         )
         .expect("get token amount");

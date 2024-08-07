@@ -106,7 +106,7 @@ pub async fn _handle_pump_buy(
     let token_amount = pump::get_token_amount(
         pump_buy_request.virtual_sol_reserves,
         pump_buy_request.virtual_token_reserves,
-        pump_buy_request.real_token_reserves,
+        None,
         lamports,
     )?;
     let token_amount = (token_amount as f64 * 0.8) as u64;

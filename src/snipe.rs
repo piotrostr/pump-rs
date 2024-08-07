@@ -61,7 +61,7 @@ pub fn get_message_type(data: &str) -> MessageType {
     }
 }
 
-pub async fn snipe(lamports: u64) -> Result<(), Box<dyn Error>> {
+pub async fn snipe_pump(lamports: u64) -> Result<(), Box<dyn Error>> {
     let latest_blockhash = Arc::new(Mutex::new(Hash::default()));
     let wallet = Arc::new(
         Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
@@ -149,8 +149,6 @@ pub async fn snipe(lamports: u64) -> Result<(), Box<dyn Error>> {
                                         latest_blockhash.lock().await;
                                     _handle_pump_buy(
                                         PumpBuyRequest {
-                                            real_sol_reserves: coin
-                                                .real_sol_reserves,
                                             mint: coin.mint,
                                             bonding_curve: coin.bonding_curve,
                                             associated_bonding_curve: coin
@@ -159,8 +157,6 @@ pub async fn snipe(lamports: u64) -> Result<(), Box<dyn Error>> {
                                                 .virtual_token_reserves,
                                             virtual_sol_reserves: coin
                                                 .virtual_sol_reserves,
-                                            real_token_reserves: coin
-                                                .real_token_reserves,
                                         },
                                         lamports,
                                         tip,
@@ -190,7 +186,7 @@ pub fn coin_filter(coin: &NewCoin) -> bool {
     let timestamp_now_ms = chrono::Utc::now().timestamp_millis();
     info!("checking {}", coin.mint);
     // check if got the info under 200ms
-    let thresh_ms = 200;
+    let thresh_ms = 250;
     if timestamp_now_ms as u64 - coin.created_timestamp > thresh_ms {
         info!(
             "FAIL: got info {} ms after creation, need under {}",

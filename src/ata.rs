@@ -30,7 +30,7 @@ pub async fn close_all_atas(
         info!("This will close all ATAs with 0 balance");
     } else {
         warn!("This will burn-close all ATAs, waiting for 5 seconds, sure?");
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
     }
     let atas = rpc_client
         .get_token_accounts_by_owner(

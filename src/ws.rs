@@ -12,24 +12,35 @@ use std::error::Error;
 use std::future::Future;
 use tokio::net::TcpStream;
 
+use crate::constants::PUMP_PORTAL_WS_HOST;
+use crate::constants::PUMP_PORTAL_WS_URL;
 use crate::constants::{PUMP_WS_HOST, PUMP_WS_URL};
 
-pub async fn connect_to_pump_websocket(
+pub async fn connect_to_pump_portal_websocket(
 ) -> Result<WebSocket<TokioIo<Upgraded>>, Box<dyn Error>> {
-    let stream = TcpStream::connect(PUMP_WS_HOST).await?;
+    _connect_to_websocket(
+        PUMP_PORTAL_WS_HOST.to_string(),
+        PUMP_PORTAL_WS_URL.to_string(),
+    )
+    .await
+}
+
+pub async fn _connect_to_websocket(
+    host: String,
+    url: String,
+) -> Result<WebSocket<TokioIo<Upgraded>>, Box<dyn Error>> {
+    let stream = TcpStream::connect(format!("{}:443", host)).await?;
 
     // Convert the TCP stream to a TLS stream
     let tls_connector =
         tokio_native_tls::native_tls::TlsConnector::new().unwrap();
     let tls_connector = tokio_native_tls::TlsConnector::from(tls_connector);
-    let tls_stream = tls_connector
-        .connect("frontend-api.pump.fun", stream)
-        .await?;
+    let tls_stream = tls_connector.connect(&host, stream).await?;
 
     let req = Request::builder()
         .method("GET")
-        .uri(PUMP_WS_URL)
-        .header("Host", "frontend-api.pump.fun")
+        .uri(url)
+        .header("Host", host)
         .header(UPGRADE, "websocket")
         .header(CONNECTION, "upgrade")
         .header(
@@ -41,6 +52,12 @@ pub async fn connect_to_pump_websocket(
 
     let (ws, _) = handshake::client(&SpawnExecutor, req, tls_stream).await?;
     Ok(ws)
+}
+
+pub async fn connect_to_pump_websocket(
+) -> Result<WebSocket<TokioIo<Upgraded>>, Box<dyn Error>> {
+    _connect_to_websocket(PUMP_WS_HOST.to_string(), PUMP_WS_URL.to_string())
+        .await
 }
 
 // Tie hyper's executor to tokio runtime
@@ -58,13 +75,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use fastwebsockets::OpCode;
+    use fastwebsockets::{Frame, OpCode, Payload};
 
     use super::*;
 
-    #[tokio::test]
-    async fn connect_works() {
-        let mut ws = connect_to_pump_websocket().await.expect("connect");
+    async fn assert_connection(ws: &mut WebSocket<TokioIo<Upgraded>>) {
         let frame = ws.read_frame().await.expect("read frame");
         let mut pass = false;
         match frame.opcode {
@@ -78,10 +93,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn listen_pump_works() {
-        // match listen_and_snipe().await {
-        //     Ok(_) => println!("Listening completed successfully"),
-        //     Err(e) => eprintln!("Listening failed: {}", e),
-        // }
+    async fn connect_works() {
+        let mut ws = connect_to_pump_websocket().await.expect("connect");
+        assert_connection(&mut ws).await;
+    }
+
+    #[tokio::test]
+    async fn connect_to_pump_portal_works() {
+        let mut ws =
+            connect_to_pump_portal_websocket().await.expect("connect");
+        let payload = r#"{"method":"subscribeNewToken"}"#;
+        ws.write_frame(Frame::text(Payload::Bytes(payload.into())))
+            .await
+            .expect("write frame");
+        assert_connection(&mut ws).await;
     }
 }
