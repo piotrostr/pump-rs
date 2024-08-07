@@ -1,5 +1,6 @@
 use crate::constants::JITO_TIP_PUBKEY;
 use crate::pump::{self, PumpBuyRequest, SearcherClient};
+use crate::util::make_compute_budget_ixs;
 use actix_web::web::Data;
 use actix_web::{get, post, web::Json, App, Error, HttpResponse, HttpServer};
 use futures_util::StreamExt;
@@ -110,14 +111,16 @@ pub async fn _handle_pump_buy(
         lamports,
     )?;
     let token_amount = (token_amount as f64 * 0.8) as u64;
-    let mut ixs = pump::_make_buy_ixs(
+    let mut ixs = vec![];
+    ixs.append(&mut make_compute_budget_ixs(2005000, 74000));
+    ixs.append(&mut pump::_make_buy_ixs(
         wallet.pubkey(),
         pump_buy_request.mint,
         pump_buy_request.bonding_curve,
         pump_buy_request.associated_bonding_curve,
         token_amount,
         lamports,
-    )?;
+    )?);
     ixs.push(transfer(
         &wallet.pubkey(),
         &Pubkey::from_str(JITO_TIP_PUBKEY).expect("parse tip pubkey"),

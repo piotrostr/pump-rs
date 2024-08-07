@@ -314,10 +314,8 @@ pub async fn buy_pump_token(
         lamports,
     )?;
 
-    // send transaction with jito
-    // 0.0001 sol tip
     if use_jito {
-        let tip = 100000;
+        let tip = 100_000;
         let mut searcher_client = searcher_client.lock().await;
         let latest_blockhash = rpc_client.get_latest_blockhash().await?;
         ixs.push(transfer(&owner, &Pubkey::from_str(JITO_TIP_PUBKEY)?, tip));
