@@ -430,6 +430,7 @@ pub async fn sell_pump_token(
     rpc_client: &RpcClient,
     pump_accounts: PumpAccounts,
     token_amount: u64,
+    searcher_client: &mut SearcherClient,
 ) -> Result<(), Box<dyn Error>> {
     let owner = wallet.pubkey();
 
@@ -444,34 +445,21 @@ pub async fn sell_pump_token(
     let sell_ix = make_pump_sell_ix(owner, pump_accounts, token_amount, ata)?;
     ixs.append(&mut compute_budget_ixs);
     ixs.push(sell_ix);
+    ixs.push(transfer(
+        &owner,
+        &Pubkey::from_str(JITO_TIP_PUBKEY)?,
+        50_000,
+    ));
 
-    let transaction = Transaction::new_signed_with_payer(
-        &ixs,
-        Some(&owner),
-        &[wallet],
-        recent_blockhash,
-    );
+    let transaction =
+        VersionedTransaction::from(Transaction::new_signed_with_payer(
+            &ixs,
+            Some(&owner),
+            &[wallet],
+            recent_blockhash,
+        ));
 
-    let res = rpc_client
-        .send_transaction_with_config(
-            &transaction,
-            RpcSendTransactionConfig {
-                skip_preflight: false,
-                min_context_slot: None,
-                preflight_commitment: Some(CommitmentLevel::Processed),
-                max_retries: None,
-                encoding: None,
-            },
-        )
-        .await;
-    match res {
-        Ok(sig) => {
-            info!("Transaction sent: {}", sig);
-        }
-        Err(e) => {
-            return Err(e.into());
-        }
-    }
+    send_bundle_no_wait(&[transaction], searcher_client).await?;
 
     Ok(())
 }
@@ -791,8 +779,15 @@ pub async fn send_pump_bump(
         )
         .await?;
 
-        sell_pump_token(wallet, rpc_client, pump_accounts, token_amount)
-            .await?;
+        let mut searcher_client = searcher_client.lock().await;
+        sell_pump_token(
+            wallet,
+            rpc_client,
+            pump_accounts,
+            token_amount,
+            &mut searcher_client,
+        )
+        .await?;
         return Ok(());
     }
 

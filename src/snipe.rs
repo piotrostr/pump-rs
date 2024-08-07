@@ -140,18 +140,9 @@ pub async fn snipe(lamports: u64) -> Result<(), Box<dyn Error>> {
                                     let coin: NewCoin =
                                         serde_json::from_str(json_parsable)
                                             .expect("parse coin");
-                                    let timestamp_now_ms =
-                                        chrono::Utc::now().timestamp_millis();
-                                    info!(
-                                        "{}",
-                                        serde_json::to_string_pretty(&coin)
-                                            .expect("pretty")
-                                    );
-                                    info!(
-                                        "got info {} ms after creation",
-                                        timestamp_now_ms as u64
-                                            - coin.created_timestamp
-                                    );
+                                    if !coin_filter(&coin) {
+                                        return;
+                                    }
                                     let mut searcher_client =
                                         searcher_client.lock().await;
                                     let latest_blockhash =
@@ -193,4 +184,39 @@ pub async fn snipe(lamports: u64) -> Result<(), Box<dyn Error>> {
         }
     }
     Ok(())
+}
+
+pub fn coin_filter(coin: &NewCoin) -> bool {
+    let timestamp_now_ms = chrono::Utc::now().timestamp_millis();
+    info!("checking {}", coin.mint);
+    // check if got the info under 200ms
+    let thresh_ms = 200;
+    if timestamp_now_ms as u64 - coin.created_timestamp > thresh_ms {
+        info!(
+            "FAIL: got info {} ms after creation, need under {}",
+            timestamp_now_ms as u64 - coin.created_timestamp,
+            thresh_ms
+        );
+        return false;
+    }
+    // check if it cointains all socials
+    if coin.twitter.is_none()
+        || coin.website.is_none()
+        || coin.telegram.is_none()
+    {
+        info!("FAIL: missing socials");
+        return false;
+    }
+    // check if they are unique
+    if coin.twitter == coin.website
+        || coin.twitter == coin.telegram
+        || coin.website == coin.telegram
+    {
+        info!("FAIL: socials are not unique");
+        return false;
+    }
+
+    info!("PASS: coin is good");
+
+    true
 }

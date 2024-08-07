@@ -1,6 +1,8 @@
 use chrono::Local;
 use env_logger::Builder;
 use futures::future::join_all;
+use futures::StreamExt;
+use jito_protos::searcher::SubscribeBundleResultsRequest;
 use jito_searcher_client::get_searcher_client;
 use log::LevelFilter;
 use pump_rs::bench;
@@ -217,38 +219,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
             info!("Wallet: {}", keypair.pubkey());
             let rpc_client =
                 Arc::new(RpcClient::new(env("RPC_URL").to_string()));
-            ata::close_all_atas(rpc_client, &keypair, burn).await?;
+            let auth = Arc::new(
+                Keypair::read_from_file(env("AUTH_KEYPAIR_PATH")).unwrap(),
+            );
+            let mut searcher_client =
+                get_searcher_client(env("BLOCK_ENGINE_URL").as_str(), &auth)
+                    .await
+                    .expect("makes searcher client");
+            let mut bundle_results_stream = searcher_client
+                .subscribe_bundle_results(SubscribeBundleResultsRequest {})
+                .await
+                .expect("subscribe bundle results")
+                .into_inner();
+            tokio::spawn(async move {
+                while let Some(res) = bundle_results_stream.next().await {
+                    info!("Received bundle result: {:?}", res);
+                }
+            });
+            ata::close_all_atas(
+                rpc_client,
+                &keypair,
+                burn,
+                &mut searcher_client,
+            )
+            .await?;
         }
         Command::PumpService {} => {
             pump_service::run_pump_service().await?;
-        }
-        Command::SellPump { mint } => {
-            let keypair =
-                Keypair::read_from_file("wtf.json").expect("read wallet");
-            let rpc_client = RpcClient::new(env("RPC_URL").to_string());
-            let ata =
-                spl_associated_token_account::get_associated_token_address(
-                    &keypair.pubkey(),
-                    &Pubkey::from_str(&mint)?,
-                );
-
-            let actual_balance = rpc_client
-                .get_token_account_balance(&ata)
-                .await?
-                .amount
-                .parse::<u64>()?;
-
-            let pump_accounts =
-                pump::mint_to_pump_accounts(&Pubkey::from_str(&mint)?)
-                    .await?;
-
-            pump::sell_pump_token(
-                &keypair,
-                &rpc_client,
-                pump_accounts,
-                actual_balance,
-            )
-            .await?;
         }
         Command::BumpPump { mint } => {
             let keypair =
@@ -291,6 +288,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let pump_tokens =
                 pump::get_tokens_held(&keypair.pubkey()).await?;
             info!("Tokens held: {}", pump_tokens.len());
+            let auth = Arc::new(
+                Keypair::read_from_file(env("AUTH_KEYPAIR_PATH")).unwrap(),
+            );
+            let mut searcher_client =
+                get_searcher_client(env("BLOCK_ENGINE_URL").as_str(), &auth)
+                    .await
+                    .expect("makes searcher client");
+            // poll for bundle results
+            let mut bundle_results_stream = searcher_client
+                .subscribe_bundle_results(SubscribeBundleResultsRequest {})
+                .await
+                .expect("subscribe bundle results")
+                .into_inner();
+            tokio::spawn(async move {
+                while let Some(res) = bundle_results_stream.next().await {
+                    info!("Received bundle result: {:?}", res);
+                }
+            });
+
             for pump_token in pump_tokens {
                 let mint = Pubkey::from_str(&pump_token.mint)?;
                 let pump_accounts =
@@ -325,8 +341,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             &rpc_client,
                             pump_accounts,
                             pump_token.balance,
+                            &mut searcher_client,
                         )
                         .await?;
+                        tokio::time::sleep(Duration::from_millis(300)).await;
                     }
                 }
             }

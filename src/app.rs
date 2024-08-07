@@ -33,10 +33,6 @@ pub enum Command {
         burn: bool,
     },
     PumpService {},
-    SellPump {
-        #[arg(long)]
-        mint: String,
-    },
     BumpPump {
         #[arg(long)]
         mint: String,
