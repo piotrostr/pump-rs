@@ -1,41 +1,27 @@
 services:
-  listener:
-    image: piotrostr/pump-ts
-    platform: linux/amd64
-    build:
-      context: ../pump-ts
-      dockerfile: ../pump-ts/Dockerfile
-    restart: always
-    healthcheck:
-      test: ["CMD", "bun", "run", "index.ts", "health"]
-      interval: 15s
-      start_period: 10s
-    networks:
-      - default
-    depends_on:
-      - sniper
   sniper:
     image: piotrostr/pump-rs
     platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "6969:6969"
     restart: always
-    networks:
-      - default
     volumes:
       - .env:/.env
       - ./FAST.json:/FAST.json
       - ./auth.json:/auth.json
-    healthcheck:
-      test: ["CMD", "./pump-rs", "sanity"]
-      interval: 15s
-      start_period: 10s
-    command: ["./pump-rs", "pump-service"]
+    command: ["./pump-rs", "snipe-portal", "--lamports", "20000000"]
     environment:
       - RUST_LOG=info
-
-networks:
-  default:
+  seller:
+    image: piotrostr/pump-rs
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    volumes:
+      - .env:/.env
+      - ./FAST.json:/FAST.json
+      - ./auth.json:/auth.json
+    command: ["./pump-rs", "seller"]

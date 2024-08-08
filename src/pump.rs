@@ -112,24 +112,13 @@ pub fn mint_to_pump_accounts(mint: &Pubkey) -> PumpAccounts {
 pub async fn get_tokens_held_pump(
     owner: &Pubkey,
 ) -> Result<Vec<PumpTokenData>, Box<dyn Error>> {
-    let url = "https://frontend-api.pump.fun/balances/{}?limit=200&offset=0";
+    let url = "https://frontend-api.pump.fun/balances/{}?limit=6666&offset=0&minBalance=0";
     let url = url.replace("{}", &owner.to_string());
     Ok(reqwest::get(&url)
         .await?
         .json::<Vec<PumpTokenData>>()
         .await?)
 }
-
-// pub async fn get_tokens_held(
-//     owner: &Pubkey,
-//     rpc_client: &RpcClient,
-// ) -> Result<Vec<PumpTokenData>, Box<dyn Error>> {
-//     let atas = rpc_client
-//         .get_token_accounts_by_owner(owner, None)
-//         .await?
-//         .value;
-//     Ok(vec![])
-// }
 
 pub async fn get_bonding_curve(
     rpc_client: &RpcClient,
