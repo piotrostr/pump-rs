@@ -51,7 +51,7 @@ pub async fn close_all_atas(
                 .as_str()
                 .expect("amount");
             if amount_str == "0" {
-                info!("Closing ATA: {}", ata.pubkey);
+                info!("{}", ata.pubkey);
                 let rpc_client = rpc_client.clone();
                 let tx = VersionedTransaction::from(
                     Transaction::new_signed_with_payer(
