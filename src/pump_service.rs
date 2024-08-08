@@ -3,6 +3,7 @@ use crate::util::{get_jito_tip_pubkey, make_compute_budget_ixs};
 use actix_web::web::Data;
 use actix_web::{get, post, web::Json, App, Error, HttpResponse, HttpServer};
 use futures_util::StreamExt;
+use jito_protos::bundle::{bundle_result, BundleResult};
 use jito_protos::searcher::SubscribeBundleResultsRequest;
 
 use jito_searcher_client::{get_searcher_client, send_bundle_no_wait};
@@ -189,7 +190,32 @@ pub async fn run_pump_service() -> std::io::Result<()> {
     // poll for bundle results
     tokio::spawn(async move {
         while let Some(res) = bundle_results_stream.next().await {
-            info!("Received bundle result: {:?}", res);
+            if let Ok(BundleResult {
+                bundle_id,
+                result: Some(result),
+            }) = res
+            {
+                match result {
+                    bundle_result::Result::Accepted(_) => {
+                        info!("Bundle {} accepted", bundle_id);
+                    }
+                    bundle_result::Result::Rejected(rejection) => {
+                        info!(
+                            "Bundle {} rejected: {:?}",
+                            bundle_id, rejection
+                        );
+                    }
+                    bundle_result::Result::Dropped(_) => {
+                        info!("Bundle {} dropped", bundle_id);
+                    }
+                    bundle_result::Result::Processed(_) => {
+                        info!("Bundle {} processed", bundle_id);
+                    }
+                    bundle_result::Result::Finalized(_) => {
+                        info!("Bundle {} finalized", bundle_id);
+                    }
+                }
+            }
         }
     });
 

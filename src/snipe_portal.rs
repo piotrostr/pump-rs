@@ -1,6 +1,6 @@
 use fastwebsockets::{Frame, OpCode, Payload};
-use futures::StreamExt;
-use jito_protos::searcher::SubscribeBundleResultsRequest;
+// use futures::StreamExt;
+// use jito_protos::searcher::SubscribeBundleResultsRequest;
 use jito_searcher_client::get_searcher_client;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::hash::Hash;
@@ -71,18 +71,18 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
     ));
 
     // poll for bundle results
-    let mut bundle_results_stream = searcher_client
-        .lock()
-        .await
-        .subscribe_bundle_results(SubscribeBundleResultsRequest {})
-        .await
-        .expect("subscribe bundle results")
-        .into_inner();
-    tokio::spawn(async move {
-        while let Some(res) = bundle_results_stream.next().await {
-            info!("Received bundle result: {:?}", res);
-        }
-    });
+    // let mut bundle_results_stream = searcher_client
+    //     .lock()
+    //     .await
+    //     .subscribe_bundle_results(SubscribeBundleResultsRequest {})
+    //     .await
+    //     .expect("subscribe bundle results")
+    //     .into_inner();
+    // tokio::spawn(async move {
+    //     while let Some(res) = bundle_results_stream.next().await {
+    //         info!("Received bundle result: {:?}", res);
+    //     }
+    // });
 
     let mut ws = connect_to_pump_portal_websocket().await?;
     ws.set_writev(true);
