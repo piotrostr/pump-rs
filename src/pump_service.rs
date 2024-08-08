@@ -109,7 +109,7 @@ pub async fn _handle_pump_buy(
         None,
         lamports,
     )?;
-    let token_amount = (token_amount as f64 * 0.92) as u64;
+    let token_amount = (token_amount as f64 * 0.98) as u64;
     let mut ixs = vec![];
     ixs.append(&mut make_compute_budget_ixs(1000069, 72014));
     ixs.append(&mut pump::_make_buy_ixs(
