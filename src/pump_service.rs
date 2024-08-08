@@ -29,7 +29,7 @@ pub async fn update_latest_blockhash(
     rpc_client: Arc<RpcClient>,
     latest_blockhash: Arc<Mutex<Hash>>,
 ) {
-    let mut interval = interval(Duration::from_secs(2));
+    let mut interval = interval(Duration::from_secs(1));
     loop {
         interval.tick().await;
         match rpc_client.get_latest_blockhash().await {
@@ -109,7 +109,7 @@ pub async fn _handle_pump_buy(
         None,
         lamports,
     )?;
-    let token_amount = (token_amount as f64 * 0.98) as u64;
+    let token_amount = (token_amount as f64 * 0.99) as u64;
     let mut ixs = vec![];
     ixs.append(&mut make_compute_budget_ixs(1000069, 72014));
     ixs.append(&mut pump::_make_buy_ixs(

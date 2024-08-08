@@ -120,6 +120,14 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                     let pump_accounts = mint_to_pump_accounts(&token.mint);
                     let associated_bonding_curve =
                         pump_accounts.associated_bonding_curve;
+                    // TODO buy based on this, say if
+                    if virtual_sol_reserves > 31_000_000_000 {
+                        warn!(
+                            "dev bought >= 1 sol (vSOL: {})",
+                            virtual_sol_reserves,
+                        );
+                        return;
+                    }
                     let buy_req = PumpBuyRequest {
                         mint: token.mint,
                         bonding_curve: token.bonding_curve,
