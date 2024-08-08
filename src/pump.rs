@@ -773,7 +773,7 @@ pub async fn send_pump_bump(
             pump_accounts,
             lamports,
             searcher_client,
-            false,
+            true,
         )
         .await?;
 
