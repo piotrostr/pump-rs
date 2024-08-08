@@ -7,6 +7,7 @@ use solana_account_decoder::UiAccountEncoding;
 use solana_client::rpc_config::{
     RpcAccountInfoConfig, RpcSendTransactionConfig,
 };
+use solana_sdk::hash::Hash;
 use solana_sdk::system_instruction::transfer;
 use solana_sdk::transaction::{Transaction, VersionedTransaction};
 use std::error::Error;
@@ -84,13 +85,11 @@ impl BondingCurveLayout {
     }
 }
 
-pub async fn mint_to_pump_accounts(
-    mint: &Pubkey,
-) -> Result<PumpAccounts, Box<dyn Error>> {
+pub fn mint_to_pump_accounts(mint: &Pubkey) -> PumpAccounts {
     // Derive the bonding curve address
     let (bonding_curve, _) = Pubkey::find_program_address(
         &[b"bonding-curve", mint.as_ref()],
-        &Pubkey::from_str(PUMP_FUN_PROGRAM)?,
+        &Pubkey::from_str(PUMP_FUN_PROGRAM).unwrap(),
     );
 
     // Derive the associated bonding curve address
@@ -100,16 +99,17 @@ pub async fn mint_to_pump_accounts(
             mint,
         );
 
-    Ok(PumpAccounts {
+    PumpAccounts {
         mint: *mint,
         bonding_curve,
         associated_bonding_curve,
         dev: Pubkey::default(),
         metadata: Pubkey::default(),
-    })
+    }
 }
 
-pub async fn get_tokens_held(
+#[timed::timed(duration(printer = "info!"))]
+pub async fn get_tokens_held_pump(
     owner: &Pubkey,
 ) -> Result<Vec<PumpTokenData>, Box<dyn Error>> {
     let url = "https://frontend-api.pump.fun/balances/{}?limit=200&offset=0";
@@ -119,6 +119,17 @@ pub async fn get_tokens_held(
         .json::<Vec<PumpTokenData>>()
         .await?)
 }
+
+// pub async fn get_tokens_held(
+//     owner: &Pubkey,
+//     rpc_client: &RpcClient,
+// ) -> Result<Vec<PumpTokenData>, Box<dyn Error>> {
+//     let atas = rpc_client
+//         .get_token_accounts_by_owner(owner, None)
+//         .await?
+//         .value;
+//     Ok(vec![])
+// }
 
 pub async fn get_bonding_curve(
     rpc_client: &RpcClient,
@@ -218,7 +229,7 @@ pub async fn get_bonding_curve(
     }
 }
 
-#[timed::timed]
+#[timed::timed(duration(printer = "info!"))]
 pub fn get_token_amount(
     virtual_sol_reserves: u64,
     virtual_token_reserves: u64,
@@ -423,12 +434,14 @@ async fn _send_tx_standard(
     Ok(())
 }
 
+#[timed::timed(duration(printer = "info!"))]
 pub async fn sell_pump_token(
     wallet: &Keypair,
-    rpc_client: &RpcClient,
+    latest_blockhash: Hash,
     pump_accounts: PumpAccounts,
     token_amount: u64,
     searcher_client: &mut SearcherClient,
+    tip: u64,
 ) -> Result<(), Box<dyn Error>> {
     let owner = wallet.pubkey();
 
@@ -437,24 +450,19 @@ pub async fn sell_pump_token(
         &pump_accounts.mint,
     );
 
-    let recent_blockhash = rpc_client.get_latest_blockhash().await?;
     let mut ixs = vec![];
     let mut compute_budget_ixs = make_compute_budget_ixs(25_000, 262_500);
     let sell_ix = make_pump_sell_ix(owner, pump_accounts, token_amount, ata)?;
     ixs.append(&mut compute_budget_ixs);
     ixs.push(sell_ix);
-    ixs.push(transfer(
-        &owner,
-        &Pubkey::from_str(JITO_TIP_PUBKEY)?,
-        50_000,
-    ));
+    ixs.push(transfer(&owner, &Pubkey::from_str(JITO_TIP_PUBKEY)?, tip));
 
     let transaction =
         VersionedTransaction::from(Transaction::new_signed_with_payer(
             &ixs,
             Some(&owner),
             &[wallet],
-            recent_blockhash,
+            latest_blockhash,
         ));
 
     send_bundle_no_wait(&[transaction], searcher_client).await?;
@@ -749,7 +757,7 @@ pub async fn send_pump_bump(
 ) -> Result<(), Box<dyn Error>> {
     let lamports = 22_800_000;
     let owner = wallet.pubkey();
-    let pump_accounts = mint_to_pump_accounts(mint).await?;
+    let pump_accounts = mint_to_pump_accounts(mint);
     let bonding_curve =
         get_bonding_curve(rpc_client, pump_accounts.bonding_curve).await?;
     let token_amount = get_token_amount(
@@ -780,10 +788,11 @@ pub async fn send_pump_bump(
         let mut searcher_client = searcher_client.lock().await;
         sell_pump_token(
             wallet,
-            rpc_client,
+            rpc_client.get_latest_blockhash().await?,
             pump_accounts,
             token_amount,
             &mut searcher_client,
+            50_000,
         )
         .await?;
         return Ok(());

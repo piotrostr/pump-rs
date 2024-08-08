@@ -144,6 +144,7 @@ pub async fn _handle_pump_buy(
 }
 
 #[get("/healthz")]
+#[timed::timed(duration(printer = "info!"))]
 pub async fn healthz(request: actix_web::HttpRequest) -> HttpResponse {
     info!(
         "healthz from {}",

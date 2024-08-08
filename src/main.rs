@@ -7,6 +7,7 @@ use jito_searcher_client::get_searcher_client;
 use log::LevelFilter;
 use pump_rs::bench;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
+use pump_rs::seller;
 use pump_rs::snipe;
 use pump_rs::snipe_portal;
 use solana_client::rpc_config::RpcTransactionConfig;
@@ -38,15 +39,14 @@ use log::{info, warn};
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenv::from_filename(".env").unwrap();
 
+    // in logs, use unix timestamp in ms
     Builder::from_default_env()
         .format(|buf, record| {
             writeln!(
                 buf,
-                "{} [{}] [{}:{}] {}",
-                Local::now().format("%Y-%m-%d %H:%M:%S"),
+                "{} [{}] {}",
+                Local::now().timestamp_millis(),
                 record.level(),
-                record.file().unwrap_or("unknown"),
-                record.line().unwrap_or(0),
                 record.args()
             )
         })
@@ -56,6 +56,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::Seller {} => {
+            info!("Running seller");
+            seller::run_seller().await?;
+        }
         Command::BenchPortal {} => {
             info!("Benching portal connection");
             bench::bench_pump_portal_connection().await?;
@@ -78,7 +82,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let rpc_client =
                 Arc::new(RpcClient::new(env("RPC_URL").to_string()));
             let pump_tokens =
-                pump::get_tokens_held(&keypair.pubkey()).await?;
+                pump::get_tokens_held_pump(&keypair.pubkey()).await?;
             let sniper_signatures = rpc_client
                 .get_signatures_for_address(&keypair.pubkey())
                 .await?;
@@ -297,7 +301,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             info!("Wallet: {}", keypair.pubkey());
             let rpc_client = RpcClient::new(env("RPC_URL").to_string());
             let pump_tokens =
-                pump::get_tokens_held(&keypair.pubkey()).await?;
+                pump::get_tokens_held_pump(&keypair.pubkey()).await?;
             info!("Tokens held: {}", pump_tokens.len());
             let auth = Arc::new(
                 Keypair::read_from_file(env("AUTH_KEYPAIR_PATH")).unwrap(),
@@ -320,8 +324,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             for pump_token in pump_tokens {
                 let mint = Pubkey::from_str(&pump_token.mint)?;
-                let pump_accounts =
-                    pump::mint_to_pump_accounts(&mint).await?;
+                let pump_accounts = pump::mint_to_pump_accounts(&mint);
                 if pump_token.balance > 0 {
                     // double-check balance of ata in order not to send a
                     // transaction bound to revert
@@ -349,10 +352,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         );
                         pump::sell_pump_token(
                             &keypair,
-                            &rpc_client,
+                            rpc_client.get_latest_blockhash().await?,
                             pump_accounts,
                             pump_token.balance,
                             &mut searcher_client,
+                            50_000, // tip
                         )
                         .await?;
                         tokio::time::sleep(Duration::from_millis(300)).await;

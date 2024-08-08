@@ -8,6 +8,7 @@ use hyper::{
     Request,
 };
 use hyper_util::rt::TokioIo;
+use log::info;
 use std::error::Error;
 use std::future::Future;
 use tokio::net::TcpStream;
@@ -25,6 +26,7 @@ pub async fn connect_to_pump_portal_websocket(
     .await
 }
 
+#[timed::timed(duration(printer = "info!"))]
 pub async fn _connect_to_websocket(
     host: String,
     url: String,
