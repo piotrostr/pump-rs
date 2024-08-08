@@ -164,15 +164,7 @@ pub async fn run_pump_service() -> std::io::Result<()> {
             .expect("makes searcher client"),
     ));
 
-    // keep a stream for bundle results
-    // TODO hopefully this doesn't deadlock
-    let mut bundle_results_stream = searcher_client
-        .lock()
-        .await
-        .subscribe_bundle_results(SubscribeBundleResultsRequest {})
-        .await
-        .expect("subscribe bundle results")
-        .into_inner();
+    start_bundle_results_listener(searcher_client.clone()).await;
 
     let app_state = Data::new(AppState {
         wallet,
@@ -187,6 +179,32 @@ pub async fn run_pump_service() -> std::io::Result<()> {
         app_state.latest_blockhash.clone(),
     ));
 
+    info!("Running pump service on 6969");
+    HttpServer::new(move || {
+        App::new()
+            .service(handle_pump_buy)
+            .service(get_blockhash)
+            .service(healthz)
+            .app_data(app_state.clone())
+    })
+    .bind(("0.0.0.0", 6969))?
+    .run()
+    .await
+}
+
+#[timed::timed(duration(printer = "info!"))]
+pub async fn start_bundle_results_listener(
+    searcher_client: Arc<Mutex<SearcherClient>>,
+) {
+    // keep a stream for bundle results
+    // TODO hopefully this doesn't deadlock
+    let mut bundle_results_stream = searcher_client
+        .lock()
+        .await
+        .subscribe_bundle_results(SubscribeBundleResultsRequest {})
+        .await
+        .expect("subscribe bundle results")
+        .into_inner();
     // poll for bundle results
     tokio::spawn(async move {
         while let Some(res) = bundle_results_stream.next().await {
@@ -218,16 +236,4 @@ pub async fn run_pump_service() -> std::io::Result<()> {
             }
         }
     });
-
-    info!("Running pump service on 6969");
-    HttpServer::new(move || {
-        App::new()
-            .service(handle_pump_buy)
-            .service(get_blockhash)
-            .service(healthz)
-            .app_data(app_state.clone())
-    })
-    .bind(("0.0.0.0", 6969))?
-    .run()
-    .await
 }

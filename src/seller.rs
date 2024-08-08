@@ -18,7 +18,9 @@ use solana_transaction_status::{
 use tokio::sync::Mutex;
 
 use crate::pump::{mint_to_pump_accounts, sell_pump_token};
-use crate::pump_service::update_latest_blockhash;
+use crate::pump_service::{
+    start_bundle_results_listener, update_latest_blockhash,
+};
 use crate::util::env;
 use log::{info, warn};
 use std::error::Error;
@@ -47,19 +49,7 @@ pub async fn run_seller() -> Result<(), Box<dyn Error>> {
         latest_blockhash.clone(),
     ));
 
-    // poll for bundle results
-    let mut bundle_results_stream = searcher_client
-        .lock()
-        .await
-        .subscribe_bundle_results(SubscribeBundleResultsRequest {})
-        .await
-        .expect("subscribe bundle results")
-        .into_inner();
-    tokio::spawn(async move {
-        while let Some(res) = bundle_results_stream.next().await {
-            info!("Received bundle result: {:?}", res);
-        }
-    });
+    start_bundle_results_listener(searcher_client.clone()).await;
 
     let pubsub_client = PubsubClient::new(&env("WS_URL")).await?;
     let (mut stream, unsub) = pubsub_client
