@@ -1,6 +1,5 @@
-use crate::constants::JITO_TIP_PUBKEY;
 use crate::pump::{self, PumpBuyRequest, SearcherClient};
-use crate::util::make_compute_budget_ixs;
+use crate::util::{get_jito_tip_pubkey, make_compute_budget_ixs};
 use actix_web::web::Data;
 use actix_web::{get, post, web::Json, App, Error, HttpResponse, HttpServer};
 use futures_util::StreamExt;
@@ -11,13 +10,11 @@ use log::{debug, error, info};
 use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::hash::Hash;
-use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::{EncodableKey, Signer};
 use solana_sdk::system_instruction::transfer;
 
 use solana_sdk::transaction::{Transaction, VersionedTransaction};
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -73,7 +70,8 @@ pub async fn handle_pump_buy(
         serde_json::to_string_pretty(&pump_buy_request)?
     );
     let lamports = 50_000_000;
-    let tip = 1_000_000;
+    let tip = 200000;
+
     let mint = pump_buy_request.mint;
     let pump_buy_request = pump_buy_request.clone();
     let wallet = state.wallet.lock().await;
@@ -110,9 +108,9 @@ pub async fn _handle_pump_buy(
         None,
         lamports,
     )?;
-    let token_amount = (token_amount as f64 * 0.8) as u64;
+    let token_amount = (token_amount as f64 * 0.9) as u64;
     let mut ixs = vec![];
-    ixs.append(&mut make_compute_budget_ixs(2005000, 74000));
+    ixs.append(&mut make_compute_budget_ixs(1000069, 72014));
     ixs.append(&mut pump::_make_buy_ixs(
         wallet.pubkey(),
         pump_buy_request.mint,
@@ -121,11 +119,7 @@ pub async fn _handle_pump_buy(
         token_amount,
         lamports,
     )?);
-    ixs.push(transfer(
-        &wallet.pubkey(),
-        &Pubkey::from_str(JITO_TIP_PUBKEY).expect("parse tip pubkey"),
-        tip,
-    ));
+    ixs.push(transfer(&wallet.pubkey(), &get_jito_tip_pubkey(), tip));
     let swap_tx =
         VersionedTransaction::from(Transaction::new_signed_with_payer(
             ixs.as_slice(),

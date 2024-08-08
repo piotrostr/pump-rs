@@ -26,6 +26,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 pub async fn run_seller() -> Result<(), Box<dyn Error>> {
+    let tip = 200000;
     let latest_blockhash = Arc::new(Mutex::new(Hash::default()));
     let wallet = Arc::new(
         Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
@@ -38,10 +39,6 @@ pub async fn run_seller() -> Result<(), Box<dyn Error>> {
             .await
             .expect("makes searcher client"),
     ));
-
-    // make parametrized as lamports probably, this will be changed to dynamic
-    // tip calculation soon
-    // let tip = 1_000_000;
 
     // poll for latest blockhash to trim 200ms
     let rpc_client = Arc::new(RpcClient::new(env("RPC_URL")));
@@ -114,7 +111,7 @@ pub async fn run_seller() -> Result<(), Box<dyn Error>> {
                         pump_accounts,
                         token_amount,
                         &mut searcher_client,
-                        500_000, // tip
+                        tip,
                     )
                     .await
                     .expect("sell pump token");

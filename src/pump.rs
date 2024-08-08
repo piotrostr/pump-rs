@@ -32,13 +32,13 @@ use solana_transaction_status::{
 };
 
 use crate::constants::{
-    ASSOCIATED_TOKEN_PROGRAM, EVENT_AUTHORITY, JITO_TIP_PUBKEY,
-    PUMP_BUY_METHOD, PUMP_FEE_ADDRESS, PUMP_FUN_PROGRAM, PUMP_GLOBAL_ADDRESS,
+    ASSOCIATED_TOKEN_PROGRAM, EVENT_AUTHORITY, PUMP_BUY_METHOD,
+    PUMP_FEE_ADDRESS, PUMP_FUN_PROGRAM, PUMP_GLOBAL_ADDRESS,
     PUMP_SELL_METHOD, RENT_PROGRAM, SYSTEM_PROGRAM_ID, TOKEN_PROGRAM,
 };
 use crate::util::{
-    make_compute_budget_ixs, pubkey_to_string, string_to_pubkey,
-    string_to_u64,
+    get_jito_tip_pubkey, make_compute_budget_ixs, pubkey_to_string,
+    string_to_pubkey, string_to_u64,
 };
 use jito_protos::searcher::searcher_service_client::SearcherServiceClient;
 use jito_searcher_client::token_authenticator::ClientInterceptor;
@@ -318,7 +318,7 @@ pub async fn buy_pump_token(
         let tip = 100_000;
         let mut searcher_client = searcher_client.lock().await;
         let latest_blockhash = rpc_client.get_latest_blockhash().await?;
-        ixs.push(transfer(&owner, &Pubkey::from_str(JITO_TIP_PUBKEY)?, tip));
+        ixs.push(transfer(&owner, &get_jito_tip_pubkey(), tip));
         let tx =
             VersionedTransaction::from(Transaction::new_signed_with_payer(
                 &ixs,
@@ -444,7 +444,7 @@ pub async fn sell_pump_token(
     let sell_ix = make_pump_sell_ix(owner, pump_accounts, token_amount, ata)?;
     ixs.append(&mut compute_budget_ixs);
     ixs.push(sell_ix);
-    ixs.push(transfer(&owner, &Pubkey::from_str(JITO_TIP_PUBKEY)?, tip));
+    ixs.push(transfer(&owner, &get_jito_tip_pubkey(), tip));
 
     let transaction =
         VersionedTransaction::from(Transaction::new_signed_with_payer(
@@ -804,7 +804,7 @@ pub async fn send_pump_bump(
 
     // 0.00005 sol
     let tip = 50_000;
-    ixs.push(transfer(&owner, &Pubkey::from_str(JITO_TIP_PUBKEY)?, tip));
+    ixs.push(transfer(&owner, &get_jito_tip_pubkey(), tip));
 
     let tx = VersionedTransaction::from(Transaction::new_signed_with_payer(
         &ixs,

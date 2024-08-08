@@ -15,8 +15,9 @@ use std::error::Error;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::constants::{JITO_TIP_PUBKEY, TOKEN_PROGRAM};
+use crate::constants::TOKEN_PROGRAM;
 use crate::pump::SearcherClient;
+use crate::util::get_jito_tip_pubkey;
 
 /// this is dangerous, be careful
 pub async fn close_all_atas(
@@ -63,11 +64,7 @@ pub async fn close_all_atas(
                                 &owner,
                                 &[&owner],
                             )?,
-                            transfer(
-                                &owner,
-                                &Pubkey::from_str(JITO_TIP_PUBKEY)?,
-                                tip,
-                            ),
+                            transfer(&owner, &get_jito_tip_pubkey(), tip),
                         ],
                         Some(&owner),
                         &[keypair],

@@ -61,7 +61,7 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
 
     // make parametrized as lamports probably, this will be changed to dynamic
     // tip calculation soon
-    let tip = 1_000_000;
+    let tip = 200000;
 
     // poll for latest blockhash to trim 200ms
     let rpc_client = Arc::new(RpcClient::new(env("RPC_URL")));
