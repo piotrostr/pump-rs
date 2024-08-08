@@ -1,8 +1,11 @@
+use rand::rngs::ThreadRng;
+use rand::thread_rng;
+use rand::Rng;
 use serde::Deserialize;
 use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::pubkey::Pubkey;
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::str::FromStr;
 
 pub fn env(var: &str) -> String {
@@ -48,22 +51,14 @@ pub fn make_compute_budget_ixs(
 }
 
 thread_local! {
-    static COUNTER: Cell<u64> = Cell::new(1);
+    static RNG: RefCell<ThreadRng> = RefCell::new(thread_rng());
 }
-
-use log::info;
 
 #[inline(always)]
-#[timed::timed(duration(printer = "info!"))]
-pub fn ultra_fast_random_0_to_7() -> u8 {
-    COUNTER.with(|counter| {
-        let current = counter.get();
-        let new_value =
-            current.wrapping_mul(6364136223846793005).wrapping_add(1);
-        counter.set(new_value);
-        (new_value >> 61) as u8
-    })
+pub fn fast_random_0_to_7() -> u8 {
+    RNG.with(|rng| rng.borrow_mut().gen_range(0..8))
 }
+
 pub fn get_jito_tip_pubkey() -> Pubkey {
     const PUBKEYS: [&str; 8] = [
         "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
@@ -75,17 +70,19 @@ pub fn get_jito_tip_pubkey() -> Pubkey {
         "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
         "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT",
     ];
-    let index = ultra_fast_random_0_to_7();
+    let index = fast_random_0_to_7();
     Pubkey::from_str(PUBKEYS[index as usize]).expect("parse tip pubkey")
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_get_jito_tip_pubkey() {
-        let start = std::time::Instant::now();
-        let _ = super::get_jito_tip_pubkey();
-        let elapsed = start.elapsed();
-        println!("elapsed: {:?}", elapsed);
+    fn bench_get_jito_tip_pubkey() {
+        for _ in 0..100 {
+            let start = std::time::Instant::now();
+            let _ = super::get_jito_tip_pubkey();
+            let elapsed = start.elapsed();
+            println!("elapsed: {:?}", elapsed);
+        }
     }
 }
