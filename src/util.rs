@@ -2,10 +2,14 @@ use rand::rngs::ThreadRng;
 use rand::thread_rng;
 use rand::Rng;
 use serde::Deserialize;
+use solana_account_decoder::parse_account_data::ParsedAccount;
+use solana_account_decoder::UiAccountData;
+use solana_client::rpc_response::RpcKeyedAccount;
 use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::pubkey::Pubkey;
 use std::cell::RefCell;
+use std::error::Error;
 use std::str::FromStr;
 
 pub fn env(var: &str) -> String {
@@ -84,5 +88,33 @@ mod tests {
             let elapsed = start.elapsed();
             println!("elapsed: {:?}", elapsed);
         }
+    }
+}
+#[derive(Debug, Default, Clone)]
+pub struct Holding {
+    pub mint: Pubkey,
+    pub ata: Pubkey,
+    pub amount: u64,
+}
+
+pub fn parse_holding(
+    ata: RpcKeyedAccount,
+) -> Result<Holding, Box<dyn Error>> {
+    if let UiAccountData::Json(ParsedAccount {
+        program: _,
+        parsed,
+        space: _,
+    }) = ata.account.data
+    {
+        let amount = parsed["info"]["tokenAmount"]["amount"]
+            .as_str()
+            .expect("amount")
+            .parse::<u64>()?;
+        let mint =
+            Pubkey::from_str(parsed["info"]["mint"].as_str().expect("mint"))?;
+        let ata = Pubkey::from_str(&ata.pubkey)?;
+        Ok(Holding { mint, ata, amount })
+    } else {
+        Err("failed to parse holding".into())
     }
 }

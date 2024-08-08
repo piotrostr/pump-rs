@@ -7,10 +7,13 @@ use jito_searcher_client::get_searcher_client;
 use log::LevelFilter;
 use pump_rs::bench;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
+use pump_rs::constants::TOKEN_PROGRAM;
 use pump_rs::seller;
 use pump_rs::snipe;
 use pump_rs::snipe_portal;
+use pump_rs::util::parse_holding;
 use solana_client::rpc_config::RpcTransactionConfig;
+use solana_client::rpc_request::TokenAccountsFilter;
 use solana_sdk::signature::Signature;
 use solana_transaction_status::UiTransactionEncoding;
 use std::collections::HashSet;
@@ -81,8 +84,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .expect("Failed to read wallet");
             let rpc_client =
                 Arc::new(RpcClient::new(env("RPC_URL").to_string()));
-            let pump_tokens =
-                pump::get_tokens_held_pump(&keypair.pubkey()).await?;
             let sniper_signatures = rpc_client
                 .get_signatures_for_address(&keypair.pubkey())
                 .await?;
@@ -96,28 +97,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // Create a semaphore with 5 permits
             let semaphore = Arc::new(Semaphore::new(5));
 
-            let results = pump_tokens.iter().map(|pump_token| {
+            let token_accounts = rpc_client
+                .get_token_accounts_by_owner(
+                    &keypair.pubkey(),
+                    TokenAccountsFilter::ProgramId(Pubkey::from_str(
+                        TOKEN_PROGRAM,
+                    )?),
+                )
+                .await?;
+
+            let results = token_accounts.iter().map(|token_account| {
+                let token_account = token_account.clone();
+                let holding =
+                    parse_holding(token_account).expect("parse holding");
                 let rpc_client = rpc_client.clone();
                 let sniper_signatures = sniper_signatures.clone();
-                let pump_token = pump_token.clone();
                 let sem = semaphore.clone();
+                let holding = holding.clone();
                 tokio::spawn(async move {
                     // Acquire a permit
                     let _permit = sem.acquire().await.unwrap();
 
                     let result = async {
                         let token_transactions = rpc_client
-                            .get_signatures_for_address(
-                                &Pubkey::from_str(&pump_token.mint)
-                                    .expect("mint"),
-                            )
+                            .get_signatures_for_address(&holding.mint)
                             .await
                             .expect("get signatures");
 
                         if token_transactions.is_empty() {
                             println!(
                                 "No transactions found for {}",
-                                pump_token.mint
+                                holding.mint
                             );
                             return u64::MAX;
                         }
@@ -140,13 +150,86 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             .await
                             .expect("get transaction");
 
-                        let tx_sniped = token_transactions
+                        let txs_sniped = token_transactions
                             .iter()
                             .filter(|sig| {
                                 sniper_signatures
                                     .contains(&sig.signature.to_string())
                             })
-                            .last();
+                            .collect::<Vec<_>>();
+                        let tx_sniped = match txs_sniped.len() {
+                            2 => {
+                                let first_sniped_tx = rpc_client
+                                    .get_transaction_with_config(
+                                        &Signature::from_str(
+                                            &txs_sniped[0].signature,
+                                        )
+                                        .expect("signature"),
+                                        RpcTransactionConfig {
+                                            encoding: Some(
+                                                UiTransactionEncoding::Json,
+                                            ),
+                                            commitment: None,
+                                            max_supported_transaction_version:
+                                                Some(0),
+                                        },
+                                    )
+                                    .await
+                                    .expect("get transaction");
+                                let second_sniped_tx = rpc_client
+                                    .get_transaction_with_config(
+                                        &Signature::from_str(
+                                            &txs_sniped[1].signature,
+                                        )
+                                        .expect("signature"),
+                                        RpcTransactionConfig {
+                                            encoding: Some(
+                                                UiTransactionEncoding::Json,
+                                            ),
+                                            commitment: None,
+                                            max_supported_transaction_version:
+                                                Some(0),
+                                        },
+                                    )
+                                    .await
+                                    .expect("get transaction");
+                                if first_sniped_tx.slot
+                                    < second_sniped_tx.slot
+                                {
+                                    Some(first_sniped_tx)
+                                } else {
+                                    Some(second_sniped_tx)
+                                }
+                            }
+                            1 => {
+                                let sniped_tx = rpc_client
+                                    .get_transaction_with_config(
+                                        &Signature::from_str(
+                                            &txs_sniped[0].signature,
+                                        )
+                                        .expect("signature"),
+                                        RpcTransactionConfig {
+                                            encoding: Some(
+                                                UiTransactionEncoding::Json,
+                                            ),
+                                            commitment: None,
+                                            max_supported_transaction_version:
+                                                Some(0),
+                                        },
+                                    )
+                                    .await
+                                    .expect("get transaction");
+                                Some(sniped_tx)
+                            }
+                            0 => None,
+                            _ => {
+                                warn!(
+                                    "More than 2 sniped txs found for {}",
+                                    holding.mint
+                                );
+                                None
+                            }
+                        };
 
                         if let Some(tx_sniped) = tx_sniped {
                             let json_tx = serde_json::to_value(&first_tx)
@@ -166,20 +249,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     tx_sniped.slot - first_tx.slot;
                                 println!(
                                     "{}: sniped in {} slots",
-                                    pump_token.mint, slots_difference
+                                    holding.mint, slots_difference
                                 );
                                 slots_difference
                             } else {
                                 println!(
                                     "No mint tx found for {}",
-                                    pump_token.mint
+                                    holding.mint
                                 );
                                 u64::MAX
                             }
                         } else {
                             println!(
                                 "No sniped tx found for {}",
-                                pump_token.mint
+                                holding.mint
                             );
                             u64::MAX
                         }
@@ -204,11 +287,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let total_slots: u64 = valid_results.iter().sum();
                 let average_slots =
                     total_slots as f64 / valid_results.len() as f64;
-                println!("Total tokens analyzed: {}", pump_tokens.len());
-                println!(
-                    "Tokens successfully sniped: {}",
-                    valid_results.len()
-                );
+                println!("Total tokens analyzed: {}", valid_results.len());
                 println!("Average snipe slots: {:.2}", average_slots);
             } else {
                 println!("No valid results to calculate average");
@@ -322,45 +401,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             });
 
-            for pump_token in pump_tokens {
-                let mint = Pubkey::from_str(&pump_token.mint)?;
+            let token_accounts = rpc_client
+                .get_token_accounts_by_owner(
+                    &keypair.pubkey(),
+                    TokenAccountsFilter::ProgramId(Pubkey::from_str(
+                        TOKEN_PROGRAM,
+                    )?),
+                )
+                .await?;
+            for token_account in token_accounts {
+                let holding =
+                    parse_holding(token_account).expect("parse holding");
+                let mint = holding.mint;
                 let pump_accounts = pump::mint_to_pump_accounts(&mint);
-                if pump_token.balance > 0 {
-                    // double-check balance of ata in order not to send a
-                    // transaction bound to revert
-                    let ata = spl_associated_token_account::get_associated_token_address(
-                        &keypair.pubkey(),
-                        &mint,
-                    );
-                    let actual_balance = match rpc_client
-                        .get_token_account_balance(&ata)
-                        .await
-                    {
-                        Ok(res) => res
-                            .amount
-                            .parse::<u64>()
-                            .expect("balance: parse u64"),
-                        Err(_) => {
-                            warn!("No balance found for {}", mint);
-                            0
-                        }
-                    };
-                    if actual_balance > 0 {
-                        info!(
-                            "Selling {} of {}",
-                            actual_balance, pump_token.mint
-                        );
-                        pump::sell_pump_token(
-                            &keypair,
-                            rpc_client.get_latest_blockhash().await?,
-                            pump_accounts,
-                            pump_token.balance,
-                            &mut searcher_client,
-                            50_000, // tip
-                        )
-                        .await?;
-                        tokio::time::sleep(Duration::from_millis(300)).await;
-                    }
+                if holding.amount > 0 {
+                    let mint = holding.mint;
+                    info!("Selling {} of {}", holding.amount, mint);
+                    pump::sell_pump_token(
+                        &keypair,
+                        rpc_client.get_latest_blockhash().await?,
+                        pump_accounts,
+                        holding.amount,
+                        &mut searcher_client,
+                        50_000, // tip
+                    )
+                    .await?;
+                    tokio::time::sleep(Duration::from_millis(300)).await;
                 }
             }
         }

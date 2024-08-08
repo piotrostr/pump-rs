@@ -301,7 +301,7 @@ pub async fn buy_pump_token(
     )?;
 
     // apply slippage in a stupid manner
-    let token_amount = (token_amount as f64 * 0.9) as u64;
+    let token_amount = (token_amount as f64 * 0.95) as u64;
 
     info!("buying {}", token_amount);
 
@@ -755,7 +755,7 @@ pub async fn send_pump_bump(
         Some(bonding_curve.real_token_reserves),
         lamports,
     )?;
-    let token_amount = (token_amount as f64 * 0.9) as u64;
+    let token_amount = (token_amount as f64 * 0.95) as u64;
 
     let ata = spl_associated_token_account::get_associated_token_address(
         &owner,
