@@ -15,6 +15,7 @@ pub struct Args {}
 
 #[derive(Debug, Parser)]
 pub enum Command {
+    Subscribe {},
     Seller {},
     BenchPump {},
     BenchPortal {},

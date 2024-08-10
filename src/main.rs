@@ -59,6 +59,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::Subscribe {} => {
+            let auth = Arc::new(
+                Keypair::read_from_file(env("AUTH_KEYPAIR_PATH")).unwrap(),
+            );
+            let _searcher_client =
+                get_searcher_client(env("BLOCK_ENGINE_URL").as_str(), &auth)
+                    .await
+                    .expect("makes searcher client");
+            return Err("Unimplemented".into());
+        }
         Command::Seller {} => {
             info!("Running seller");
             seller::run_seller().await?;
