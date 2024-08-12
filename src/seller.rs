@@ -1,5 +1,4 @@
 use futures::StreamExt;
-use jito_protos::searcher::SubscribeBundleResultsRequest;
 use jito_searcher_client::get_searcher_client;
 use solana_client::nonblocking::pubsub_client::PubsubClient;
 use solana_client::nonblocking::rpc_client::RpcClient;

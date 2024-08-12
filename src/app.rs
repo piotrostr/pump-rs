@@ -15,6 +15,10 @@ pub struct Args {}
 
 #[derive(Debug, Parser)]
 pub enum Command {
+    IsOnCurve {
+        #[arg(long)]
+        pubkey: String,
+    },
     Subscribe {},
     Seller {},
     BenchPump {},

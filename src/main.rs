@@ -1,3 +1,4 @@
+use anstream::println;
 use chrono::Local;
 use env_logger::Builder;
 use futures::future::join_all;
@@ -59,6 +60,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::IsOnCurve { pubkey } => {
+            let pubkey = Pubkey::from_str(&pubkey).expect("parse pubkey");
+            println!("Pubkey: {}", pubkey);
+            println!("Is on curve: {}", pubkey.is_on_curve());
+        }
         Command::Subscribe {} => {
             let auth = Arc::new(
                 Keypair::read_from_file(env("AUTH_KEYPAIR_PATH")).unwrap(),
