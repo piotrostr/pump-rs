@@ -74,6 +74,7 @@ pub async fn run_seller() -> Result<(), Box<dyn Error>> {
             .await
             {
                 // parse mint here and sell after waiting 10 slots
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                 let (mint, was_bid) =
                     tx_to_mint(&tx, &wallet.pubkey()).expect("tx to mint");
                 if !was_bid {
