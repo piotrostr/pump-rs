@@ -91,6 +91,7 @@ pub async fn run_seller() -> Result<(), Box<dyn Error>> {
                     if token_amount == 0 {
                         return;
                     }
+                    let token_amount = token_amount / 2;
                     let pump_accounts = mint_to_pump_accounts(&mint);
                     let mut searcher_client = searcher_client.lock().await;
                     let latest_blockhash = *latest_blockhash.read().await;
