@@ -10,8 +10,8 @@ use pump_rs::bench;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
 use pump_rs::constants::TOKEN_PROGRAM;
 use pump_rs::pump_service::make_deadline_tx;
-use pump_rs::pump_service::update_slot;
 use pump_rs::seller;
+use pump_rs::slot::update_slot;
 use pump_rs::snipe;
 use pump_rs::snipe_portal;
 use pump_rs::util::parse_holding;
@@ -49,18 +49,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     dotenv::from_filename(".env").unwrap();
 
     // in logs, use unix timestamp in ms
-    Builder::from_default_env()
-        .format(|buf, record| {
-            writeln!(
-                buf,
-                "{} [{}] {}",
-                Local::now().timestamp_millis(),
-                record.level(),
-                record.args()
-            )
-        })
-        .filter(None, LevelFilter::Info)
-        .try_init()?;
+    // Builder::from_default_env()
+    //     .format(|buf, record| {
+    //         writeln!(
+    //             buf,
+    //             "{} [{}] {}",
+    //             Local::now().timestamp_millis(),
+    //             record.level(),
+    //             record.args()
+    //         )
+    //     })
+    //     .filter(None, LevelFilter::Info)
+    //     .try_init()?;
 
     let app = App::parse();
 
@@ -92,6 +92,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         Command::SlotSubscribe {} => {
             let current_slot = Arc::new(RwLock::new(0));
+            println!("Current slot: {}", *current_slot.read().await);
+            tracing::info!("Subscribing to slot updates");
             let _ = update_slot(current_slot).await;
         }
         Command::IsOnCurve { pubkey } => {

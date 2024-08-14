@@ -10,9 +10,8 @@ use solana_sdk::signer::EncodableKey;
 use tokio::sync::{Mutex, RwLock};
 
 use crate::pump::{mint_to_pump_accounts, PumpBuyRequest};
-use crate::pump_service::{
-    _handle_pump_buy, update_latest_blockhash, update_slot,
-};
+use crate::pump_service::{_handle_pump_buy, update_latest_blockhash};
+use crate::slot::update_slot;
 use crate::util::{env, pubkey_to_string, string_to_pubkey};
 use crate::ws::connect_to_pump_portal_websocket;
 use log::{info, warn};
@@ -140,6 +139,8 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                     // 10-20 slots before even and then up to 5 slots after, that means it
                     // might make sense to poll from the pump.fun api still, or get
                     // a jito validator, not sure how to go about this at this stage tbf
+                    //
+                    // if there is a problem with the deadline, either need to resolve it
                     _handle_pump_buy(
                         buy_req,
                         lamports,

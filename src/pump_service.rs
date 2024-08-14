@@ -10,7 +10,6 @@ use jito_protos::searcher::SubscribeBundleResultsRequest;
 use jito_searcher_client::{get_searcher_client, send_bundle_no_wait};
 use log::{debug, error, info};
 use serde_json::json;
-use solana_client::nonblocking::pubsub_client::PubsubClient;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::hash::Hash;
 use solana_sdk::instruction::Instruction;
@@ -24,7 +23,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
-use tokio::task::JoinHandle;
 use tokio::time::interval;
 
 fn env(key: &str) -> String {
@@ -46,28 +44,6 @@ pub fn make_deadline_tx(
         &[keypair],
         latest_blockhash,
     ))
-}
-
-pub fn update_slot(current_slot: Arc<RwLock<u64>>) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        loop {
-            let pubsub_client = PubsubClient::new(&env("WS_URL"))
-                .await
-                .expect("pubsub client");
-            let (mut stream, unsub) = pubsub_client
-                .slot_subscribe()
-                .await
-                .expect("slot subscribe");
-            while let Some(slot_info) = stream.next().await {
-                let mut current_slot = current_slot.write().await;
-                *current_slot = slot_info.slot;
-                debug!("Updated slot: {}", current_slot);
-            }
-            unsub().await;
-            // wait for a second before reconnecting
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-    })
 }
 
 pub async fn update_latest_blockhash(
@@ -156,7 +132,7 @@ pub async fn _handle_pump_buy(
         None,
         lamports,
     )?;
-    let token_amount = (token_amount as f64 * 0.98) as u64;
+    let token_amount = (token_amount as f64 * 0.97) as u64;
     let mut ixs = vec![];
     ixs.append(&mut make_compute_budget_ixs(1000069, 72014));
     ixs.append(&mut pump::_make_buy_ixs(
