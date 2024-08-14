@@ -1,25 +1,20 @@
-use crate::constants::SLOT_CHECKER_MAINNET;
-use crate::pump::{self, PumpBuyRequest, SearcherClient};
+use crate::jito::{start_bundle_results_listener, SearcherClient};
+use crate::pump::{self, PumpBuyRequest};
+use crate::slot::make_deadline_tx;
 use crate::util::{get_jito_tip_pubkey, make_compute_budget_ixs};
 use actix_web::web::Data;
 use actix_web::{get, post, web::Json, App, Error, HttpResponse, HttpServer};
-use futures_util::StreamExt;
-use jito_protos::bundle::{bundle_result, BundleResult};
-use jito_protos::searcher::SubscribeBundleResultsRequest;
 
 use jito_searcher_client::{get_searcher_client, send_bundle_no_wait};
 use log::{debug, error, info};
 use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::hash::Hash;
-use solana_sdk::instruction::Instruction;
-use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::{EncodableKey, Signer};
 use solana_sdk::system_instruction::transfer;
 
 use solana_sdk::transaction::{Transaction, VersionedTransaction};
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
@@ -27,23 +22,6 @@ use tokio::time::interval;
 
 fn env(key: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| panic!("{} env var not set", key))
-}
-
-pub fn make_deadline_tx(
-    deadline: u64,
-    latest_blockhash: Hash,
-    keypair: &Keypair,
-) -> VersionedTransaction {
-    VersionedTransaction::from(Transaction::new_signed_with_payer(
-        &[Instruction::new_with_bytes(
-            Pubkey::from_str(SLOT_CHECKER_MAINNET).expect("pubkey"),
-            &deadline.to_le_bytes(),
-            vec![],
-        )],
-        Some(&keypair.pubkey()),
-        &[keypair],
-        latest_blockhash,
-    ))
 }
 
 pub async fn update_latest_blockhash(
@@ -221,50 +199,4 @@ pub async fn run_pump_service() -> std::io::Result<()> {
     .bind(("0.0.0.0", 6969))?
     .run()
     .await
-}
-
-#[timed::timed(duration(printer = "info!"))]
-pub async fn start_bundle_results_listener(
-    searcher_client: Arc<Mutex<SearcherClient>>,
-) {
-    // keep a stream for bundle results
-    // TODO hopefully this doesn't deadlock
-    let mut bundle_results_stream = searcher_client
-        .lock()
-        .await
-        .subscribe_bundle_results(SubscribeBundleResultsRequest {})
-        .await
-        .expect("subscribe bundle results")
-        .into_inner();
-    // poll for bundle results
-    tokio::spawn(async move {
-        while let Some(res) = bundle_results_stream.next().await {
-            if let Ok(BundleResult {
-                bundle_id,
-                result: Some(result),
-            }) = res
-            {
-                match result {
-                    bundle_result::Result::Accepted(_) => {
-                        info!("Bundle {} accepted", bundle_id);
-                    }
-                    bundle_result::Result::Rejected(rejection) => {
-                        info!(
-                            "Bundle {} rejected: {:?}",
-                            bundle_id, rejection
-                        );
-                    }
-                    bundle_result::Result::Dropped(_) => {
-                        info!("Bundle {} dropped", bundle_id);
-                    }
-                    bundle_result::Result::Processed(_) => {
-                        info!("Bundle {} processed", bundle_id);
-                    }
-                    bundle_result::Result::Finalized(_) => {
-                        info!("Bundle {} finalized", bundle_id);
-                    }
-                }
-            }
-        }
-    });
 }

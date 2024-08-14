@@ -16,10 +16,9 @@ use solana_transaction_status::{
 };
 use tokio::sync::{Mutex, RwLock};
 
+use crate::jito::start_bundle_results_listener;
 use crate::pump::{mint_to_pump_accounts, sell_pump_token};
-use crate::pump_service::{
-    start_bundle_results_listener, update_latest_blockhash,
-};
+use crate::pump_service::update_latest_blockhash;
 use crate::util::env;
 use log::{info, warn};
 use std::error::Error;

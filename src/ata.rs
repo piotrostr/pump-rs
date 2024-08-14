@@ -16,7 +16,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::constants::TOKEN_PROGRAM;
-use crate::pump::SearcherClient;
+use crate::jito::SearcherClient;
 use crate::util::get_jito_tip_pubkey;
 
 /// this is dangerous, be careful

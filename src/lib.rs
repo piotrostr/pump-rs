@@ -2,6 +2,7 @@ pub mod app;
 pub mod ata;
 pub mod bench;
 pub mod constants;
+pub mod jito;
 pub mod pump;
 pub mod pump_service;
 pub mod seller;

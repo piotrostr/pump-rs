@@ -1,4 +1,3 @@
-use anstream::println;
 use chrono::Local;
 use env_logger::Builder;
 use futures::future::join_all;
@@ -9,8 +8,8 @@ use log::LevelFilter;
 use pump_rs::bench;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
 use pump_rs::constants::TOKEN_PROGRAM;
-use pump_rs::pump_service::make_deadline_tx;
 use pump_rs::seller;
+use pump_rs::slot::make_deadline_tx;
 use pump_rs::slot::update_slot;
 use pump_rs::snipe;
 use pump_rs::snipe_portal;
@@ -306,8 +305,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 let slots_difference =
                                     tx_sniped.slot - first_tx.slot;
                                 println!(
-                                    "{}: sniped in {} slots",
-                                    holding.mint, slots_difference
+                                    "{}: {} in slots, created: {}, sniped: {}",
+                                    holding.mint,
+                                    slots_difference,
+                                    first_tx.slot,
+                                    tx_sniped.slot
                                 );
                                 slots_difference
                             } else {

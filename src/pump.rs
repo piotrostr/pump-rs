@@ -1,3 +1,4 @@
+use crate::jito::SearcherClient;
 use jito_protos::searcher::SubscribeBundleResultsRequest;
 use jito_searcher_client::{
     send_bundle_no_wait, send_bundle_with_confirmation,
@@ -40,12 +41,6 @@ use crate::util::{
     get_jito_tip_pubkey, make_compute_budget_ixs, pubkey_to_string,
     string_to_pubkey, string_to_u64,
 };
-use jito_protos::searcher::searcher_service_client::SearcherServiceClient;
-use jito_searcher_client::token_authenticator::ClientInterceptor;
-use tonic::{codegen::InterceptedService, transport::Channel};
-
-pub type SearcherClient =
-    SearcherServiceClient<InterceptedService<Channel, ClientInterceptor>>;
 
 #[derive(BorshSerialize)]
 pub struct PumpFunSwapInstructionData {
