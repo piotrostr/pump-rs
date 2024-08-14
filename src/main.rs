@@ -48,19 +48,25 @@ use log::{info, warn};
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenv::from_filename(".env").unwrap();
 
+    let logs_level = match std::env::var("RUST_LOG") {
+        Ok(level) => {
+            LevelFilter::from_str(&level).unwrap_or(LevelFilter::Info)
+        }
+        Err(_) => LevelFilter::Info,
+    };
     // in logs, use unix timestamp in ms
-    // Builder::from_default_env()
-    //     .format(|buf, record| {
-    //         writeln!(
-    //             buf,
-    //             "{} [{}] {}",
-    //             Local::now().timestamp_millis(),
-    //             record.level(),
-    //             record.args()
-    //         )
-    //     })
-    //     .filter(None, LevelFilter::Info)
-    //     .try_init()?;
+    Builder::from_default_env()
+        .format(|buf, record| {
+            writeln!(
+                buf,
+                "{} [{}] {}",
+                Local::now().timestamp_millis(),
+                record.level(),
+                record.args()
+            )
+        })
+        .filter(None, logs_level)
+        .try_init()?;
 
     let app = App::parse();
 
@@ -93,7 +99,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Command::SlotSubscribe {} => {
             let current_slot = Arc::new(RwLock::new(0));
             println!("Current slot: {}", *current_slot.read().await);
-            tracing::info!("Subscribing to slot updates");
+            tracing::info!(msg = "Subscribing to slot updates");
             let _ = update_slot(current_slot).await;
         }
         Command::IsOnCurve { pubkey } => {
