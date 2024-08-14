@@ -70,6 +70,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::SubscribePump {} => {
+            let _ = pump::subscribe_to_pump().await;
+        }
         Command::TestSlotProgram {} => {
             let rpc_client = RpcClient::new(env("RPC_URL").to_string());
             let keypair = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
@@ -305,7 +308,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 let slots_difference =
                                     tx_sniped.slot - first_tx.slot;
                                 println!(
-                                    "{}: {} in slots, created: {}, sniped: {}",
+                                    "{}: in {}, created: {}, sniped: {}",
                                     holding.mint,
                                     slots_difference,
                                     first_tx.slot,

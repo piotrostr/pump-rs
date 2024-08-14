@@ -125,7 +125,7 @@ pub async fn get_tx_with_retries(
     Box<dyn Error + Send + Sync>,
 > {
     let max_retries = 20;
-    let mut cooldown = 350;
+    let cooldown = 350;
     for _ in 0..max_retries {
         match rpc_client
             .get_transaction_with_config(
@@ -157,7 +157,7 @@ pub async fn get_token_balance_with_retries(
     ata: &Pubkey,
 ) -> Result<u64, Box<dyn Error + Send + Sync>> {
     let max_retries = 20;
-    let mut cooldown = 350;
+    let cooldown = 350;
     for _ in 0..max_retries {
         match rpc_client
             .get_token_account_balance_with_commitment(

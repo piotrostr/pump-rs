@@ -1,12 +1,15 @@
 use crate::jito::SearcherClient;
+use futures_util::stream::StreamExt;
 use jito_protos::searcher::SubscribeBundleResultsRequest;
 use jito_searcher_client::{
     send_bundle_no_wait, send_bundle_with_confirmation,
 };
 use log::{debug, error, info, warn};
 use solana_account_decoder::UiAccountEncoding;
+use solana_client::nonblocking::pubsub_client::PubsubClient;
 use solana_client::rpc_config::{
-    RpcAccountInfoConfig, RpcSendTransactionConfig,
+    RpcAccountInfoConfig, RpcSendTransactionConfig, RpcTransactionLogsConfig,
+    RpcTransactionLogsFilter,
 };
 use solana_sdk::hash::Hash;
 use solana_sdk::system_instruction::transfer;
@@ -16,6 +19,7 @@ use std::error::Error;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -34,11 +38,12 @@ use solana_transaction_status::{
 
 use crate::constants::{
     ASSOCIATED_TOKEN_PROGRAM, EVENT_AUTHORITY, PUMP_BUY_METHOD,
-    PUMP_FEE_ADDRESS, PUMP_FUN_PROGRAM, PUMP_GLOBAL_ADDRESS,
-    PUMP_SELL_METHOD, RENT_PROGRAM, SYSTEM_PROGRAM_ID, TOKEN_PROGRAM,
+    PUMP_FEE_ADDRESS, PUMP_FUN_MINT_AUTHORITY, PUMP_FUN_PROGRAM,
+    PUMP_GLOBAL_ADDRESS, PUMP_SELL_METHOD, RENT_PROGRAM, SYSTEM_PROGRAM_ID,
+    TOKEN_PROGRAM,
 };
 use crate::util::{
-    get_jito_tip_pubkey, make_compute_budget_ixs, pubkey_to_string,
+    env, get_jito_tip_pubkey, make_compute_budget_ixs, pubkey_to_string,
     string_to_pubkey, string_to_u64,
 };
 
@@ -101,6 +106,31 @@ pub fn mint_to_pump_accounts(mint: &Pubkey) -> PumpAccounts {
         dev: Pubkey::default(),
         metadata: Pubkey::default(),
     }
+}
+
+pub fn subscribe_to_pump() -> JoinHandle<()> {
+    tokio::spawn(async move {
+        loop {
+            let pubsub_client = PubsubClient::new(&env("WS_URL"))
+                .await
+                .expect("pubsub client");
+            let (mut stream, unsub) = pubsub_client
+                .logs_subscribe(
+                    RpcTransactionLogsFilter::Mentions(vec![
+                        PUMP_FUN_MINT_AUTHORITY.to_string(),
+                    ]),
+                    RpcTransactionLogsConfig {
+                        commitment: Some(CommitmentConfig::processed()),
+                    },
+                )
+                .await
+                .expect("logs subscribe");
+            while let Some(data) = stream.next().await {
+                tracing::info!("{}", data.value.signature);
+            }
+            unsub().await;
+        }
+    })
 }
 
 #[timed::timed(duration(printer = "info!"))]

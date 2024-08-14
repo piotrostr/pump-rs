@@ -8,6 +8,7 @@ use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::EncodableKey;
 use tokio::sync::{Mutex, RwLock};
+use tracing::info;
 
 use crate::pump::{mint_to_pump_accounts, PumpBuyRequest};
 use crate::pump_service::{_handle_pump_buy, update_latest_blockhash};
@@ -21,6 +22,7 @@ use std::sync::Arc;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewPumpPortalToken {
+    signature: String,
     #[serde(
         serialize_with = "pubkey_to_string",
         deserialize_with = "string_to_pubkey"
@@ -94,6 +96,7 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                     continue;
                 }
                 let token: NewPumpPortalToken = serde_json::from_str(&data)?;
+                info!("signature {:?}", token.signature);
                 let latest_blockhash = latest_blockhash.clone();
                 let wallet = wallet.clone();
                 let searcher_client = searcher_client.clone();
