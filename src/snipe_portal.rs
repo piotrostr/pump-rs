@@ -104,7 +104,7 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                     let mut searcher_client = searcher_client.lock().await;
                     // below math is wrong, hardcoding for now
                     let virtual_token_reserves =
-                        (token.virtual_token_reserves * 1e5).round() as u64;
+                        (token.virtual_token_reserves * 1e6).round() as u64;
                     let virtual_sol_reserves =
                         (token.virtual_sol_reserves * 1e9).round() as u64;
                     let pump_accounts = mint_to_pump_accounts(&token.mint);
