@@ -19,6 +19,7 @@ use std::error::Error;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 
@@ -135,7 +136,8 @@ pub fn mint_to_pump_accounts(mint: &Pubkey) -> PumpAccounts {
     }
 }
 
-pub fn subscribe_to_pump() -> JoinHandle<()> {
+pub fn subscribe_to_pump(slot: Arc<RwLock<u64>>) -> JoinHandle<()> {
+    let slot = slot.clone();
     tokio::spawn(async move {
         loop {
             let pubsub_client = PubsubClient::new(&env("WS_URL"))
@@ -147,13 +149,18 @@ pub fn subscribe_to_pump() -> JoinHandle<()> {
                         PUMP_FUN_MINT_AUTHORITY.to_string(),
                     ]),
                     RpcTransactionLogsConfig {
-                        commitment: Some(CommitmentConfig::processed()),
+                        commitment: Some(CommitmentConfig::confirmed()),
                     },
                 )
                 .await
                 .expect("logs subscribe");
+            info!("Subscribed to pump logs");
             while let Some(data) = stream.next().await {
-                tracing::info!("{}", data.value.signature);
+                tracing::info!(
+                    "{}: {}",
+                    slot.read().await,
+                    data.value.signature
+                );
             }
             unsub().await;
         }

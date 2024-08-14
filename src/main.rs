@@ -94,7 +94,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             info!("{}: created {}", mint, slot_created);
         }
         Command::SubscribePump {} => {
-            let _ = pump::subscribe_to_pump().await;
+            let slot = Arc::new(RwLock::new(0));
+            update_slot(slot.clone());
+            let _ = pump::subscribe_to_pump(slot.clone()).await;
         }
         Command::TestSlotProgram {} => {
             let rpc_client = RpcClient::new(env("RPC_URL").to_string());
