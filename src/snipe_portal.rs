@@ -127,6 +127,19 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                         virtual_token_reserves,
                         virtual_sol_reserves,
                     };
+                    // tl;dr
+                    // if there is a deadline, might miss bids coz the pumpportal data comes before
+                    // slot of creation
+                    // --
+                    // deadline is 7 slots but info comes before mint is finalized
+                    // basically, if the token amount is based on the amount in the pool at
+                    // launch, adding a low slippage param like 2% is going to ensure that even
+                    // after people buy in and out only dev can dump, it might be useful to
+                    // re-add the deadline onto the txs but there is a problem - sometimes the
+                    // data comes before the slot of creation and sometimes after, it might be
+                    // 10-20 slots before even and then up to 5 slots after, that means it
+                    // might make sense to poll from the pump.fun api still, or get
+                    // a jito validator, not sure how to go about this at this stage tbf
                     _handle_pump_buy(
                         buy_req,
                         lamports,
@@ -134,17 +147,7 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                         &wallet.clone(),
                         &mut searcher_client,
                         &latest_blockhash,
-                        None, // Some(current_slot + 7), // deadline is 7 slots but info comes before mint
-                              // is finalized, I had an error regarding token amount, removing
-                              // deadline for a bit
-                              // basically, if the token amount is based on the amount in the pool at
-                              // launch, adding a low slippage param like 2% is going to ensure that even
-                              // after people buy in and out only dev can dump, it might be useful to
-                              // re-add the deadline onto the txs but there is a problem - sometimes the
-                              // data comes before the slot of creation and sometimes after, it might be
-                              // 10-20 slots before even and then up to 5 slots after, that means it
-                              // might make sense to poll from the pump.fun api still, or get
-                              // a jito validator, not sure how to go about this at this stage tbf
+                        None, // Some(current_slot + 7),
                     )
                     .await
                     .expect("handle pump buy");

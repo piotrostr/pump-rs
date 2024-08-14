@@ -301,7 +301,7 @@ pub async fn buy_pump_token(
     )?;
 
     // apply slippage in a stupid manner
-    let token_amount = (token_amount as f64 * 0.95) as u64;
+    let token_amount = (token_amount as f64 * 0.97) as u64;
 
     info!("buying {}", token_amount);
 
