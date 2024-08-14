@@ -1,5 +1,7 @@
 pub const SLOT_CHECKER_TESTNET: &str =
     "3Ja6QtP34XX6jQbdBeCeViHGYmRpxCfymKHA5BqmiwH9";
+pub const SLOT_CHECKER_MAINNET: &str =
+    "3Ja6QtP34XX6jQbdBeCeViHGYmRpxCfymKHA5BqmiwH9";
 
 // URLs
 pub const PUMP_WS_URL: &str =

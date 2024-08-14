@@ -8,8 +8,9 @@ use jito_searcher_client::get_searcher_client;
 use log::LevelFilter;
 use pump_rs::bench;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
-use pump_rs::constants::SLOT_CHECKER_TESTNET;
+use pump_rs::constants::SLOT_CHECKER_MAINNET;
 use pump_rs::constants::TOKEN_PROGRAM;
+use pump_rs::pump_service::_make_deadline_ix;
 use pump_rs::pump_service::update_slot;
 use pump_rs::seller;
 use pump_rs::snipe;
@@ -68,17 +69,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     match app.command {
         Command::TestSlotProgram {} => {
-            let rpc_client =
-                RpcClient::new("https://api.testnet.solana.com".to_string());
-            let keypair = Keypair::read_from_file("../keys/fuck.json")
+            let rpc_client = RpcClient::new(env("RPC_URL").to_string());
+            let keypair = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
                 .expect("read wallet");
-            let current_slot = rpc_client.get_slot().await? + 500;
+            let current_slot = rpc_client
+                .get_slot_with_commitment(CommitmentConfig::confirmed())
+                .await?;
+            info!("Current slot: {}", current_slot);
             let tx = Transaction::new_signed_with_payer(
-                &[Instruction::new_with_bytes(
-                    Pubkey::from_str(SLOT_CHECKER_TESTNET)?,
-                    &current_slot.to_le_bytes(),
-                    vec![],
-                )],
+                &[_make_deadline_ix(current_slot + 20)],
                 Some(&keypair.pubkey()),
                 &[&keypair],
                 rpc_client.get_latest_blockhash().await?,

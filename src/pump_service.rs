@@ -1,3 +1,4 @@
+use crate::constants::SLOT_CHECKER_MAINNET;
 use crate::pump::{self, PumpBuyRequest, SearcherClient};
 use crate::util::{get_jito_tip_pubkey, make_compute_budget_ixs};
 use actix_web::web::Data;
@@ -12,11 +13,14 @@ use serde_json::json;
 use solana_client::nonblocking::pubsub_client::PubsubClient;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::hash::Hash;
+use solana_sdk::instruction::Instruction;
+use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::{EncodableKey, Signer};
 use solana_sdk::system_instruction::transfer;
 
 use solana_sdk::transaction::{Transaction, VersionedTransaction};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
@@ -25,6 +29,14 @@ use tokio::time::interval;
 
 fn env(key: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| panic!("{} env var not set", key))
+}
+
+pub fn _make_deadline_ix(deadline: u64) -> Instruction {
+    Instruction::new_with_bytes(
+        Pubkey::from_str(SLOT_CHECKER_MAINNET).expect("pubkey"),
+        &deadline.to_le_bytes(),
+        vec![],
+    )
 }
 
 pub fn update_slot(current_slot: Arc<RwLock<u64>>) -> JoinHandle<()> {
