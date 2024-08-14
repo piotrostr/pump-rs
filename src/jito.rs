@@ -1,11 +1,16 @@
 use fastwebsockets::OpCode;
 use futures_util::StreamExt;
+use serde_json::json;
+use solana_sdk::transaction::Transaction;
+use solana_transaction_status::Encodable;
+use solana_transaction_status::EncodedTransaction;
+use solana_transaction_status::UiTransactionEncoding;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
-use jito_protos::bundle::{bundle_result::Result, BundleResult};
+use jito_protos::bundle::{bundle_result, BundleResult};
 use jito_protos::searcher::searcher_service_client::SearcherServiceClient;
 use jito_protos::searcher::SubscribeBundleResultsRequest;
 use jito_searcher_client::token_authenticator::ClientInterceptor;
@@ -40,22 +45,22 @@ pub async fn start_bundle_results_listener(
             }) = res
             {
                 match result {
-                    Result::Accepted(_) => {
+                    bundle_result::Result::Accepted(_) => {
                         info!("Bundle {} accepted", bundle_id);
                     }
-                    Result::Rejected(rejection) => {
+                    bundle_result::Result::Rejected(rejection) => {
                         info!(
                             "Bundle {} rejected: {:?}",
                             bundle_id, rejection
                         );
                     }
-                    Result::Dropped(_) => {
+                    bundle_result::Result::Dropped(_) => {
                         info!("Bundle {} dropped", bundle_id);
                     }
-                    Result::Processed(_) => {
+                    bundle_result::Result::Processed(_) => {
                         info!("Bundle {} processed", bundle_id);
                     }
-                    Result::Finalized(_) => {
+                    bundle_result::Result::Finalized(_) => {
                         info!("Bundle {} finalized", bundle_id);
                     }
                 }
@@ -106,4 +111,55 @@ pub fn subscribe_tips(dynamic_tip: Arc<RwLock<u64>>) -> JoinHandle<()> {
             }
         }
     })
+}
+
+pub async fn send_out_bundle_to_all_regions(
+    bundle: &[Transaction],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let client = Arc::new(RwLock::new(reqwest::Client::new()));
+    let leader_regions = [""]; // ["amsterdam", "ny", "frankfurt", "tokyo", "slc"];
+    let leader_urls = leader_regions
+        .iter()
+        .map(|region| {
+            format!(
+                "https://{}mainnet.block-engine.jito.wtf/api/v1/bundles",
+                region
+            )
+        })
+        .collect::<Vec<String>>();
+
+    let bundle = bundle
+        .iter()
+        .map(|tx| match tx.encode(UiTransactionEncoding::Binary) {
+            EncodedTransaction::LegacyBinary(b) => b,
+            _ => panic!("impossible"),
+        })
+        .collect::<Vec<_>>();
+
+    for leader_url in leader_urls {
+        let leader_url = leader_url.clone();
+        let bundle = bundle.clone();
+        let client = client.clone();
+        tokio::spawn(async move {
+            let client = client.read().await;
+            let res = client
+                .post(&leader_url)
+                .header("content-type", "application/json")
+                .json(&json!({
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "sendBundle",
+                    "params": [bundle]
+                }))
+                .send()
+                .await
+                .expect("send bundle");
+            // .json::<serde_json::Value>()
+            // .await
+            // .expect("json");
+            info!("{}", res.status());
+            info!("Sent bundle to {}: {:?}", leader_url, res);
+        });
+    }
+    Ok(())
 }

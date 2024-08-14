@@ -34,10 +34,11 @@ anstream = "0.6.0"
 chrono = "0.4.38"
 futures = "0.3.30"
 fastwebsockets = { version = "0.8.0", features = ["upgrade"] }
-hyper = "1.4.1"
+hyper = { version = "1.4.1", features = ["full"] }
 http-body-util = "0.1.2"
 url = "2.5.2"
 hyper-util = "0.1.7"
 tokio-native-tls = "0.3.1"
 rand = "0.8.5"
 tracing = "0.1.40"
+bs58 = "0.5.1"

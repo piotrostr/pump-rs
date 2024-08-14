@@ -21,11 +21,13 @@ use crate::pump::{mint_to_pump_accounts, sell_pump_token};
 use crate::pump_service::update_latest_blockhash;
 use crate::util::env;
 use log::{info, warn};
+use std::collections::HashMap;
 use std::error::Error;
 use std::str::FromStr;
 use std::sync::Arc;
 
 pub async fn run_seller() -> Result<(), Box<dyn Error>> {
+    let sold_cache = Arc::new(RwLock::new(HashMap::new()));
     let tip = 200000;
     let latest_blockhash = Arc::new(RwLock::new(Hash::default()));
     let wallet = Arc::new(
@@ -66,6 +68,7 @@ pub async fn run_seller() -> Result<(), Box<dyn Error>> {
         let latest_blockhash = latest_blockhash.clone();
         let wallet = wallet.clone();
         let searcher_client = searcher_client.clone();
+        let sold_cache = sold_cache.clone();
         tokio::spawn(async move {
             if let Ok(tx) = get_tx_with_retries(
                 &rpc_client,
@@ -88,9 +91,13 @@ pub async fn run_seller() -> Result<(), Box<dyn Error>> {
                 if let Ok(token_amount) =
                     get_token_balance_with_retries(&rpc_client, &ata).await
                 {
-                    if token_amount == 0 {
+                    if token_amount == 0
+                        || sold_cache.read().await.contains_key(&sig)
+                    {
                         return;
                     }
+                    let mut sold_cache = sold_cache.write().await;
+                    sold_cache.insert(sig.clone(), token_amount);
                     let token_amount = token_amount / 2;
                     let pump_accounts = mint_to_pump_accounts(&mint);
                     let mut searcher_client = searcher_client.lock().await;

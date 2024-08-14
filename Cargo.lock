@@ -3176,6 +3176,7 @@ dependencies = [
  "actix-web",
  "anstream",
  "borsh 1.5.1",
+ "bs58",
  "chrono",
  "clap 4.5.13",
  "dotenv",

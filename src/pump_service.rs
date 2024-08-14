@@ -1,4 +1,7 @@
-use crate::jito::{start_bundle_results_listener, SearcherClient};
+use crate::jito::{
+    send_out_bundle_to_all_regions, start_bundle_results_listener,
+    SearcherClient,
+};
 use crate::pump::{self, PumpBuyRequest};
 use crate::slot::make_deadline_tx;
 use crate::util::{get_jito_tip_pubkey, make_compute_budget_ixs};
@@ -123,12 +126,12 @@ pub async fn _handle_pump_buy(
     )?);
     ixs.push(transfer(&wallet.pubkey(), &get_jito_tip_pubkey(), tip));
     let swap_tx =
-        VersionedTransaction::from(Transaction::new_signed_with_payer(
+        /*VersionedTransaction::from(*/Transaction::new_signed_with_payer(
             ixs.as_slice(),
             Some(&wallet.pubkey()),
             &[wallet],
             *latest_blockhash,
-        ));
+        );
     let start = std::time::Instant::now();
     let txs = if let Some(deadline) = deadline {
         vec![
@@ -138,12 +141,13 @@ pub async fn _handle_pump_buy(
     } else {
         vec![swap_tx]
     };
-    let res = send_bundle_no_wait(&txs, searcher_client)
-        .await
-        .expect("send bundle no wait");
+    // let res = send_bundle_no_wait(&txs, searcher_client)
+    //     .await
+    //     .expect("send bundle no wait");
+    send_out_bundle_to_all_regions(&txs).await?;
     let elapsed = start.elapsed();
     info!("Bundle sent in {:?}", elapsed);
-    info!("Bundle sent. UUID: {}", res.into_inner().uuid);
+    // info!("Bundle sent. UUID: {}", res.into_inner().uuid);
     Ok(())
 }
 

@@ -241,9 +241,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 sniper_signatures
                                     .contains(&sig.signature.to_string())
                             })
-                            .collect::<Vec<_>>();
-                        let tx_sniped = match txs_sniped.len() {
-                            2 => {
+                            .map(|tx| async move {
                                 let first_sniped_tx = rpc_client
                                     .get_transaction_with_config(
                                         &Signature::from_str(
@@ -261,60 +259,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     )
                                     .await
                                     .expect("get transaction");
-                                let second_sniped_tx = rpc_client
-                                    .get_transaction_with_config(
-                                        &Signature::from_str(
-                                            &txs_sniped[1].signature,
-                                        )
-                                        .expect("signature"),
-                                        RpcTransactionConfig {
-                                            encoding: Some(
-                                                UiTransactionEncoding::Json,
-                                            ),
-                                            commitment: None,
-                                            max_supported_transaction_version:
-                                                Some(0),
-                                        },
-                                    )
-                                    .await
-                                    .expect("get transaction");
-                                if first_sniped_tx.slot
-                                    < second_sniped_tx.slot
-                                {
-                                    Some(first_sniped_tx)
-                                } else {
-                                    Some(second_sniped_tx)
-                                }
-                            }
-                            1 => {
-                                let sniped_tx = rpc_client
-                                    .get_transaction_with_config(
-                                        &Signature::from_str(
-                                            &txs_sniped[0].signature,
-                                        )
-                                        .expect("signature"),
-                                        RpcTransactionConfig {
-                                            encoding: Some(
-                                                UiTransactionEncoding::Json,
-                                            ),
-                                            commitment: None,
-                                            max_supported_transaction_version:
-                                                Some(0),
-                                        },
-                                    )
-                                    .await
-                                    .expect("get transaction");
-                                Some(sniped_tx)
-                            }
-                            0 => None,
-                            _ => {
-                                warn!(
-                                    "More than 2 sniped txs found for {}",
-                                    holding.mint
-                                );
-                                None
-                            }
-                        };
+                            });
 
                         if let Some(tx_sniped) = tx_sniped {
                             let json_tx = serde_json::to_value(&first_tx)

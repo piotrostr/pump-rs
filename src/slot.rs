@@ -41,8 +41,9 @@ pub fn make_deadline_tx(
     deadline: u64,
     latest_blockhash: Hash,
     keypair: &Keypair,
-) -> VersionedTransaction {
-    VersionedTransaction::from(Transaction::new_signed_with_payer(
+) -> Transaction {
+    /*VersionedTransaction::from(*/
+    Transaction::new_signed_with_payer(
         &[Instruction::new_with_bytes(
             Pubkey::from_str(SLOT_CHECKER_MAINNET).expect("pubkey"),
             &deadline.to_le_bytes(),
@@ -51,5 +52,5 @@ pub fn make_deadline_tx(
         Some(&keypair.pubkey()),
         &[keypair],
         latest_blockhash,
-    ))
+    ) /*)*/
 }
