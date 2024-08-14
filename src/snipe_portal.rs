@@ -18,7 +18,7 @@ use crate::ws::connect_to_pump_portal_websocket;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewPumpPortalToken {
@@ -72,7 +72,7 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
         latest_blockhash.clone(),
     ));
     let slot = Arc::new(RwLock::new(0));
-    update_slot(slot.clone()).await;
+    update_slot(slot.clone());
 
     // poll for bundle results
     // let mut bundle_results_stream = searcher_client
@@ -113,7 +113,6 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                 let wallet = wallet.clone();
                 let searcher_client = searcher_client.clone();
                 let slot = slot.clone();
-                info!("buying {}", token.mint);
                 tokio::spawn(async move {
                     let latest_blockhash = latest_blockhash.read().await;
                     let mut searcher_client = searcher_client.lock().await;
@@ -134,10 +133,7 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                         return;
                     }
                     let current_slot = slot.read().await;
-                    info!(
-                        "{} buying {} with vSOL: {}",
-                        current_slot, token.mint, virtual_sol_reserves
-                    );
+                    info!("{} buying {}", current_slot, token.mint);
                     let buy_req = PumpBuyRequest {
                         mint: token.mint,
                         bonding_curve: token.bonding_curve,
