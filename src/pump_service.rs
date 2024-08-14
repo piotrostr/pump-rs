@@ -31,12 +31,21 @@ fn env(key: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| panic!("{} env var not set", key))
 }
 
-pub fn _make_deadline_ix(deadline: u64) -> Instruction {
-    Instruction::new_with_bytes(
-        Pubkey::from_str(SLOT_CHECKER_MAINNET).expect("pubkey"),
-        &deadline.to_le_bytes(),
-        vec![],
-    )
+pub fn make_deadline_tx(
+    deadline: u64,
+    latest_blockhash: Hash,
+    keypair: &Keypair,
+) -> VersionedTransaction {
+    VersionedTransaction::from(Transaction::new_signed_with_payer(
+        &[Instruction::new_with_bytes(
+            Pubkey::from_str(SLOT_CHECKER_MAINNET).expect("pubkey"),
+            &deadline.to_le_bytes(),
+            vec![],
+        )],
+        Some(&keypair.pubkey()),
+        &[keypair],
+        latest_blockhash,
+    ))
 }
 
 pub fn update_slot(current_slot: Arc<RwLock<u64>>) -> JoinHandle<()> {

@@ -8,9 +8,8 @@ use jito_searcher_client::get_searcher_client;
 use log::LevelFilter;
 use pump_rs::bench;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
-use pump_rs::constants::SLOT_CHECKER_MAINNET;
 use pump_rs::constants::TOKEN_PROGRAM;
-use pump_rs::pump_service::_make_deadline_ix;
+use pump_rs::pump_service::make_deadline_tx;
 use pump_rs::pump_service::update_slot;
 use pump_rs::seller;
 use pump_rs::snipe;
@@ -20,9 +19,7 @@ use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_client::rpc_config::RpcTransactionConfig;
 use solana_client::rpc_request::TokenAccountsFilter;
 use solana_sdk::commitment_config::CommitmentConfig;
-use solana_sdk::instruction::Instruction;
 use solana_sdk::signature::Signature;
-use solana_sdk::transaction::Transaction;
 use solana_transaction_status::UiTransactionEncoding;
 use std::collections::HashSet;
 use std::io::Write;
@@ -76,11 +73,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .get_slot_with_commitment(CommitmentConfig::confirmed())
                 .await?;
             info!("Current slot: {}", current_slot);
-            let tx = Transaction::new_signed_with_payer(
-                &[_make_deadline_ix(current_slot + 20)],
-                Some(&keypair.pubkey()),
-                &[&keypair],
+            let tx = make_deadline_tx(
+                current_slot + 20,
                 rpc_client.get_latest_blockhash().await?,
+                &keypair,
             );
             let sig = rpc_client
                 .send_and_confirm_transaction_with_spinner_and_config(
