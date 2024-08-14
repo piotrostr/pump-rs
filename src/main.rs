@@ -8,6 +8,7 @@ use log::LevelFilter;
 use pump_rs::bench;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
 use pump_rs::constants::TOKEN_PROGRAM;
+use pump_rs::jito::subscribe_tips;
 use pump_rs::seller;
 use pump_rs::seller::get_tx_with_retries;
 use pump_rs::slot::make_deadline_tx;
@@ -71,6 +72,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::SubscribeTip {} => {
+            let tip = Arc::new(RwLock::new(0u64));
+            subscribe_tips(tip).await?;
+        }
         Command::GetTx { sig } => {
             let signature = Signature::from_str(&sig).expect("parse sig");
             let rpc_client = RpcClient::new(env("RPC_URL").to_string());

@@ -10,6 +10,7 @@ use solana_sdk::signer::EncodableKey;
 use tokio::sync::{Mutex, RwLock};
 use tracing::info;
 
+use crate::jito::subscribe_tips;
 use crate::pump::{mint_to_pump_accounts, PumpBuyRequest};
 use crate::pump_service::{_handle_pump_buy, update_latest_blockhash};
 use crate::slot::update_slot;
@@ -64,7 +65,8 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
 
     // make parametrized as lamports probably, this will be changed to dynamic
     // tip calculation soon
-    let tip = 200000;
+    let dynamic_tip = Arc::new(RwLock::new(0));
+    subscribe_tips(dynamic_tip.clone());
 
     // poll for latest blockhash to trim 200ms
     let rpc_client = Arc::new(RpcClient::new(env("RPC_URL")));
@@ -101,6 +103,7 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                 let wallet = wallet.clone();
                 let searcher_client = searcher_client.clone();
                 let slot = slot.clone();
+                let dynamic_tip = dynamic_tip.clone();
                 tokio::spawn(async move {
                     let latest_blockhash = latest_blockhash.read().await;
                     let mut searcher_client = searcher_client.lock().await;
@@ -147,7 +150,7 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                     _handle_pump_buy(
                         buy_req,
                         lamports,
-                        tip,
+                        *dynamic_tip.read().await,
                         &wallet.clone(),
                         &mut searcher_client,
                         &latest_blockhash,

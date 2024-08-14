@@ -56,6 +56,39 @@ pub async fn _connect_to_websocket(
     Ok(ws)
 }
 
+pub async fn connect_to_jito_tip_websocket(
+) -> Result<WebSocket<TokioIo<Upgraded>>, Box<dyn Error>> {
+    _connect_to_websocket_insecure(
+        "bundles-api-rest.jito.wtf".to_string(),
+        "http://bundles-api-rest.jito.wtf/api/v1/bundles/tip_stream"
+            .to_string(),
+    )
+    .await
+}
+
+#[timed::timed(duration(printer = "info!"))]
+pub async fn _connect_to_websocket_insecure(
+    host: String,
+    url: String,
+) -> Result<WebSocket<TokioIo<Upgraded>>, Box<dyn Error>> {
+    let stream = TcpStream::connect(format!("{}:80", host)).await?;
+    let req = Request::builder()
+        .method("GET")
+        .uri(url)
+        .header("Host", host)
+        .header(UPGRADE, "websocket")
+        .header(CONNECTION, "upgrade")
+        .header(
+            "Sec-WebSocket-Key",
+            fastwebsockets::handshake::generate_key(),
+        )
+        .header("Sec-WebSocket-Version", "13")
+        .body(Empty::<Bytes>::new())?;
+
+    let (ws, _) = handshake::client(&SpawnExecutor, req, stream).await?;
+    Ok(ws)
+}
+
 pub async fn connect_to_pump_websocket(
 ) -> Result<WebSocket<TokioIo<Upgraded>>, Box<dyn Error>> {
     _connect_to_websocket(PUMP_WS_HOST.to_string(), PUMP_WS_URL.to_string())
@@ -92,6 +125,12 @@ mod tests {
             _ => {}
         }
         assert!(pass);
+    }
+
+    #[tokio::test]
+    async fn connect_to_jito_tip_works() {
+        let mut ws = connect_to_jito_tip_websocket().await.expect("connect");
+        assert_connection(&mut ws).await;
     }
 
     #[tokio::test]
