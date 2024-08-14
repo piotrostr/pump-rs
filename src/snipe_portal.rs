@@ -15,7 +15,7 @@ use crate::pump_service::{_handle_pump_buy, update_latest_blockhash};
 use crate::slot::update_slot;
 use crate::util::{env, pubkey_to_string, string_to_pubkey};
 use crate::ws::connect_to_pump_portal_websocket;
-use log::{info, warn};
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::sync::Arc;

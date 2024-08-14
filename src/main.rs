@@ -9,6 +9,7 @@ use pump_rs::bench;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
 use pump_rs::constants::TOKEN_PROGRAM;
 use pump_rs::seller;
+use pump_rs::seller::get_tx_with_retries;
 use pump_rs::slot::make_deadline_tx;
 use pump_rs::slot::update_slot;
 use pump_rs::snipe;
@@ -70,6 +71,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::GetTx { sig } => {
+            let signature = Signature::from_str(&sig).expect("parse sig");
+            let rpc_client = RpcClient::new(env("RPC_URL").to_string());
+            let tx = get_tx_with_retries(&rpc_client, &signature)
+                .await
+                .expect("tx");
+            info!("{:#?}", tx);
+        }
+        Command::SlotCreated { mint } => {
+            let rpc_client = RpcClient::new(env("RPC_URL").to_string());
+            let slot_created = pump::get_slot_created(
+                &rpc_client,
+                &Pubkey::from_str(&mint)?,
+            )
+            .await?;
+            info!("{}: created {}", mint, slot_created);
+        }
         Command::SubscribePump {} => {
             let _ = pump::subscribe_to_pump().await;
         }

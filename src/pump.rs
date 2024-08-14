@@ -8,8 +8,8 @@ use log::{debug, error, info, warn};
 use solana_account_decoder::UiAccountEncoding;
 use solana_client::nonblocking::pubsub_client::PubsubClient;
 use solana_client::rpc_config::{
-    RpcAccountInfoConfig, RpcSendTransactionConfig, RpcTransactionLogsConfig,
-    RpcTransactionLogsFilter,
+    RpcAccountInfoConfig, RpcSendTransactionConfig, RpcTransactionConfig,
+    RpcTransactionLogsConfig, RpcTransactionLogsFilter,
 };
 use solana_sdk::hash::Hash;
 use solana_sdk::system_instruction::transfer;
@@ -29,11 +29,11 @@ use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::commitment_config::{CommitmentConfig, CommitmentLevel};
 use solana_sdk::instruction::{AccountMeta, Instruction};
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::Keypair;
+use solana_sdk::signature::{Keypair, Signature};
 use solana_sdk::signer::Signer;
 use solana_transaction_status::{
     EncodedConfirmedTransactionWithStatusMeta, EncodedTransaction, UiMessage,
-    UiParsedMessage,
+    UiParsedMessage, UiTransactionEncoding,
 };
 
 use crate::constants::{
@@ -83,6 +83,33 @@ impl BondingCurveLayout {
     pub fn parse(data: &[u8]) -> Result<Self, std::io::Error> {
         Self::try_from_slice(data)
     }
+}
+
+pub async fn get_slot_created(
+    rpc_client: &RpcClient,
+    mint: &Pubkey,
+) -> Result<u64, Box<dyn std::error::Error>> {
+    let token_transactions =
+        rpc_client.get_signatures_for_address(mint).await?;
+
+    if token_transactions.is_empty() {
+        warn!("No transactions found for mint: {}", mint);
+        return Ok(0);
+    }
+
+    let first_tx_sig = token_transactions.last().unwrap();
+    let first_tx = rpc_client
+        .get_transaction_with_config(
+            &Signature::from_str(&first_tx_sig.signature).expect("signature"),
+            RpcTransactionConfig {
+                encoding: Some(UiTransactionEncoding::Json),
+                commitment: None,
+                max_supported_transaction_version: Some(0),
+            },
+        )
+        .await?;
+
+    Ok(first_tx.slot)
 }
 
 pub fn mint_to_pump_accounts(mint: &Pubkey) -> PumpAccounts {

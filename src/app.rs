@@ -15,6 +15,14 @@ pub struct Args {}
 
 #[derive(Debug, Parser)]
 pub enum Command {
+    GetTx {
+        #[arg(long)]
+        sig: String,
+    },
+    SlotCreated {
+        #[arg(long)]
+        mint: String,
+    },
     SubscribePump {},
     TestSlotProgram {},
     SlotSubscribe {},
