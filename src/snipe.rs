@@ -7,7 +7,7 @@ use solana_sdk::hash::Hash;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::EncodableKey;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::pump::PumpBuyRequest;
 use crate::pump_service::{_handle_pump_buy, update_latest_blockhash};
@@ -62,7 +62,7 @@ pub fn get_message_type(data: &str) -> MessageType {
 }
 
 pub async fn snipe_pump(lamports: u64) -> Result<(), Box<dyn Error>> {
-    let latest_blockhash = Arc::new(Mutex::new(Hash::default()));
+    let latest_blockhash = Arc::new(RwLock::new(Hash::default()));
     let wallet = Arc::new(
         Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
             .expect("read fund keypair"),
@@ -146,7 +146,7 @@ pub async fn snipe_pump(lamports: u64) -> Result<(), Box<dyn Error>> {
                                     let mut searcher_client =
                                         searcher_client.lock().await;
                                     let latest_blockhash =
-                                        latest_blockhash.lock().await;
+                                        latest_blockhash.read().await;
                                     _handle_pump_buy(
                                         PumpBuyRequest {
                                             mint: coin.mint,

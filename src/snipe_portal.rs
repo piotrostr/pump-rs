@@ -7,16 +7,18 @@ use solana_sdk::hash::Hash;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::EncodableKey;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::pump::{mint_to_pump_accounts, PumpBuyRequest};
-use crate::pump_service::{_handle_pump_buy, update_latest_blockhash};
+use crate::pump_service::{
+    _handle_pump_buy, update_latest_blockhash, update_slot,
+};
 use crate::util::{env, pubkey_to_string, string_to_pubkey};
 use crate::ws::connect_to_pump_portal_websocket;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewPumpPortalToken {
@@ -46,7 +48,7 @@ pub struct NewPumpPortalToken {
 }
 
 pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
-    let latest_blockhash = Arc::new(Mutex::new(Hash::default()));
+    let latest_blockhash = Arc::new(RwLock::new(Hash::default()));
     let wallet = Arc::new(
         Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
             .expect("read fund keypair"),
@@ -69,6 +71,8 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
         rpc_client.clone(),
         latest_blockhash.clone(),
     ));
+    let slot = Arc::new(RwLock::new(0));
+    update_slot(slot.clone()).await;
 
     // poll for bundle results
     // let mut bundle_results_stream = searcher_client
@@ -108,9 +112,10 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                 let latest_blockhash = latest_blockhash.clone();
                 let wallet = wallet.clone();
                 let searcher_client = searcher_client.clone();
+                let slot = slot.clone();
                 info!("buying {}", token.mint);
                 tokio::spawn(async move {
-                    let latest_blockhash = latest_blockhash.lock().await;
+                    let latest_blockhash = latest_blockhash.read().await;
                     let mut searcher_client = searcher_client.lock().await;
                     // below math is wrong, hardcoding for now
                     let virtual_token_reserves =
@@ -128,6 +133,11 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                         );
                         return;
                     }
+                    let current_slot = slot.read().await;
+                    info!(
+                        "{} buying {} with vSOL: {}",
+                        current_slot, token.mint, virtual_sol_reserves
+                    );
                     let buy_req = PumpBuyRequest {
                         mint: token.mint,
                         bonding_curve: token.bonding_curve,

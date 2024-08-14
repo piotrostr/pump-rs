@@ -9,6 +9,7 @@ use jito_protos::searcher::SubscribeBundleResultsRequest;
 use jito_searcher_client::{get_searcher_client, send_bundle_no_wait};
 use log::{debug, error, info};
 use serde_json::json;
+use solana_client::nonblocking::pubsub_client::PubsubClient;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::hash::Hash;
 use solana_sdk::signature::Keypair;
@@ -18,23 +19,46 @@ use solana_sdk::system_instruction::transfer;
 use solana_sdk::transaction::{Transaction, VersionedTransaction};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
+use tokio::task::JoinHandle;
 use tokio::time::interval;
 
 fn env(key: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| panic!("{} env var not set", key))
 }
 
+pub fn update_slot(current_slot: Arc<RwLock<u64>>) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        loop {
+            let pubsub_client = PubsubClient::new(&env("WS_URL"))
+                .await
+                .expect("pubsub client");
+            let (mut stream, unsub) = pubsub_client
+                .slot_subscribe()
+                .await
+                .expect("slot subscribe");
+            while let Some(slot_info) = stream.next().await {
+                let mut current_slot = current_slot.write().await;
+                *current_slot = slot_info.slot;
+                debug!("Updated slot: {}", current_slot);
+            }
+            unsub().await;
+            // wait for a second before reconnecting
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    })
+}
+
 pub async fn update_latest_blockhash(
     rpc_client: Arc<RpcClient>,
-    latest_blockhash: Arc<Mutex<Hash>>,
+    latest_blockhash: Arc<RwLock<Hash>>,
 ) {
     let mut interval = interval(Duration::from_secs(1));
     loop {
         interval.tick().await;
         match rpc_client.get_latest_blockhash().await {
             Ok(new_blockhash) => {
-                let mut blockhash = latest_blockhash.lock().await;
+                let mut blockhash = latest_blockhash.write().await;
                 *blockhash = new_blockhash;
                 debug!("Updated latest blockhash: {}", new_blockhash);
             }
@@ -48,13 +72,13 @@ pub async fn update_latest_blockhash(
 pub struct AppState {
     pub wallet: Arc<Mutex<Keypair>>,
     pub searcher_client: Arc<Mutex<SearcherClient>>,
-    pub latest_blockhash: Arc<Mutex<Hash>>,
+    pub latest_blockhash: Arc<RwLock<Hash>>,
 }
 
 #[get("/blockhash")]
 #[timed::timed(duration(printer = "info!"))]
 pub async fn get_blockhash(state: Data<AppState>) -> HttpResponse {
-    let blockhash = state.latest_blockhash.lock().await;
+    let blockhash = state.latest_blockhash.read().await;
     HttpResponse::Ok().json(json!({
         "blockhash": blockhash.to_string()
     }))
@@ -77,7 +101,7 @@ pub async fn handle_pump_buy(
     let pump_buy_request = pump_buy_request.clone();
     let wallet = state.wallet.lock().await;
     let mut searcher_client = state.searcher_client.lock().await;
-    let latest_blockhash = state.latest_blockhash.lock().await;
+    let latest_blockhash = state.latest_blockhash.read().await;
     _handle_pump_buy(
         pump_buy_request,
         lamports,
@@ -169,7 +193,7 @@ pub async fn run_pump_service() -> std::io::Result<()> {
     let app_state = Data::new(AppState {
         wallet,
         searcher_client,
-        latest_blockhash: Arc::new(Mutex::new(Hash::default())),
+        latest_blockhash: Arc::new(RwLock::new(Hash::default())),
     });
 
     // poll for latest blockhash to trim 200ms

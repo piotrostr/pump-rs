@@ -1,3 +1,6 @@
+pub const SLOT_CHECKER_TESTNET: &str =
+    "3Ja6QtP34XX6jQbdBeCeViHGYmRpxCfymKHA5BqmiwH9";
+
 // URLs
 pub const PUMP_WS_URL: &str =
     "https://frontend-api.pump.fun/socket.io/?EIO=4&transport=websocket";

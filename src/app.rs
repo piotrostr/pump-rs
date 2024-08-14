@@ -15,6 +15,8 @@ pub struct Args {}
 
 #[derive(Debug, Parser)]
 pub enum Command {
+    TestSlotProgram {},
+    SlotSubscribe {},
     IsOnCurve {
         #[arg(long)]
         pubkey: String,

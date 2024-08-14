@@ -14,7 +14,7 @@ use solana_transaction_status::option_serializer::OptionSerializer;
 use solana_transaction_status::{
     EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding,
 };
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::pump::{mint_to_pump_accounts, sell_pump_token};
 use crate::pump_service::{
@@ -28,7 +28,7 @@ use std::sync::Arc;
 
 pub async fn run_seller() -> Result<(), Box<dyn Error>> {
     let tip = 200000;
-    let latest_blockhash = Arc::new(Mutex::new(Hash::default()));
+    let latest_blockhash = Arc::new(RwLock::new(Hash::default()));
     let wallet = Arc::new(
         Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
             .expect("read fund keypair"),
@@ -93,7 +93,7 @@ pub async fn run_seller() -> Result<(), Box<dyn Error>> {
                     }
                     let pump_accounts = mint_to_pump_accounts(&mint);
                     let mut searcher_client = searcher_client.lock().await;
-                    let latest_blockhash = *latest_blockhash.lock().await;
+                    let latest_blockhash = *latest_blockhash.read().await;
                     sell_pump_token(
                         &wallet,
                         latest_blockhash,

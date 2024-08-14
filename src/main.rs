@@ -8,18 +8,25 @@ use jito_searcher_client::get_searcher_client;
 use log::LevelFilter;
 use pump_rs::bench;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
+use pump_rs::constants::SLOT_CHECKER_TESTNET;
 use pump_rs::constants::TOKEN_PROGRAM;
+use pump_rs::pump_service::update_slot;
 use pump_rs::seller;
 use pump_rs::snipe;
 use pump_rs::snipe_portal;
 use pump_rs::util::parse_holding;
+use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_client::rpc_config::RpcTransactionConfig;
 use solana_client::rpc_request::TokenAccountsFilter;
+use solana_sdk::commitment_config::CommitmentConfig;
+use solana_sdk::instruction::Instruction;
 use solana_sdk::signature::Signature;
+use solana_sdk::transaction::Transaction;
 use solana_transaction_status::UiTransactionEncoding;
 use std::collections::HashSet;
 use std::io::Write;
 use std::{error::Error, str::FromStr, sync::Arc, time::Duration};
+use tokio::sync::RwLock;
 
 use clap::Parser;
 use pump_rs::{
@@ -60,6 +67,38 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::TestSlotProgram {} => {
+            let rpc_client =
+                RpcClient::new("https://api.testnet.solana.com".to_string());
+            let keypair = Keypair::read_from_file("../keys/fuck.json")
+                .expect("read wallet");
+            let current_slot = rpc_client.get_slot().await? + 500;
+            let tx = Transaction::new_signed_with_payer(
+                &[Instruction::new_with_bytes(
+                    Pubkey::from_str(SLOT_CHECKER_TESTNET)?,
+                    &current_slot.to_le_bytes(),
+                    vec![],
+                )],
+                Some(&keypair.pubkey()),
+                &[&keypair],
+                rpc_client.get_latest_blockhash().await?,
+            );
+            let sig = rpc_client
+                .send_and_confirm_transaction_with_spinner_and_config(
+                    &tx,
+                    CommitmentConfig::confirmed(),
+                    RpcSendTransactionConfig {
+                        skip_preflight: true,
+                        ..Default::default()
+                    },
+                )
+                .await?;
+            info!("{sig:#?}");
+        }
+        Command::SlotSubscribe {} => {
+            let current_slot = Arc::new(RwLock::new(0));
+            let _ = update_slot(current_slot).await;
+        }
         Command::IsOnCurve { pubkey } => {
             let pubkey = Pubkey::from_str(&pubkey).expect("parse pubkey");
             println!("Pubkey: {}", pubkey);
