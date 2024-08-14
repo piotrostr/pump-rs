@@ -130,6 +130,7 @@ pub async fn handle_pump_buy(
         &wallet,
         &mut searcher_client,
         &latest_blockhash,
+        None,
     )
     .await?;
     Ok(HttpResponse::Ok().json(json!({
@@ -147,6 +148,7 @@ pub async fn _handle_pump_buy(
     wallet: &Keypair,
     searcher_client: &mut SearcherClient,
     latest_blockhash: &Hash,
+    deadline: Option<u64>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let token_amount = pump::get_token_amount(
         pump_buy_request.virtual_sol_reserves,
@@ -174,7 +176,15 @@ pub async fn _handle_pump_buy(
             *latest_blockhash,
         ));
     let start = std::time::Instant::now();
-    let res = send_bundle_no_wait(&[swap_tx], searcher_client)
+    let txs = if let Some(deadline) = deadline {
+        vec![
+            make_deadline_tx(deadline, *latest_blockhash, wallet),
+            swap_tx,
+        ]
+    } else {
+        vec![swap_tx]
+    };
+    let res = send_bundle_no_wait(&txs, searcher_client)
         .await
         .expect("send bundle no wait");
     let elapsed = start.elapsed();

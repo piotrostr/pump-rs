@@ -74,20 +74,6 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
     let slot = Arc::new(RwLock::new(0));
     update_slot(slot.clone());
 
-    // poll for bundle results
-    // let mut bundle_results_stream = searcher_client
-    //     .lock()
-    //     .await
-    //     .subscribe_bundle_results(SubscribeBundleResultsRequest {})
-    //     .await
-    //     .expect("subscribe bundle results")
-    //     .into_inner();
-    // tokio::spawn(async move {
-    //     while let Some(res) = bundle_results_stream.next().await {
-    //         info!("Received bundle result: {:?}", res);
-    //     }
-    // });
-
     let mut ws = connect_to_pump_portal_websocket().await?;
     ws.set_writev(true);
 
@@ -132,7 +118,7 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                         );
                         return;
                     }
-                    let current_slot = slot.read().await;
+                    let current_slot = *slot.read().await;
                     info!("{} buying {}", current_slot, token.mint);
                     let buy_req = PumpBuyRequest {
                         mint: token.mint,
@@ -148,6 +134,7 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                         &wallet.clone(),
                         &mut searcher_client,
                         &latest_blockhash,
+                        Some(current_slot + 5),
                     )
                     .await
                     .expect("handle pump buy");

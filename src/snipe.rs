@@ -163,6 +163,7 @@ pub async fn snipe_pump(lamports: u64) -> Result<(), Box<dyn Error>> {
                                         &wallet.clone(),
                                         &mut searcher_client,
                                         &latest_blockhash,
+                                        None, // TODO add deadline here too
                                     )
                                     .await
                                     .expect("handle pump buy");
