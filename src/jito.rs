@@ -92,9 +92,9 @@ pub fn subscribe_tips(dynamic_tip: Arc<RwLock<u64>>) -> JoinHandle<()> {
                                 .unwrap();
 
                             let mut dynamic_tip = dynamic_tip.write().await;
-                            *dynamic_tip = ((top_75th * 0.7 + top_95th * 0.3)
-                                * 10e9)
-                                as u64;
+                            *dynamic_tip =
+                                ((top_75th * 0.95 + top_95th * 0.05) * 10e9)
+                                    as u64;
                             info!("Updated tip to {}", dynamic_tip);
                         }
                     }

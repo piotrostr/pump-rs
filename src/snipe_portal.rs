@@ -154,7 +154,7 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                         &wallet.clone(),
                         &mut searcher_client,
                         &latest_blockhash,
-                        Some(current_slot + 30),
+                        Some(current_slot + 40),
                     )
                     .await
                     .expect("handle pump buy");
