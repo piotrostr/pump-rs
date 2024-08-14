@@ -241,11 +241,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 sniper_signatures
                                     .contains(&sig.signature.to_string())
                             })
-                            .map(|tx| async move {
-                                let first_sniped_tx = rpc_client
+                            .map(|tx| {
+                                let rpc_client = rpc_client.clone();
+                                async move {
+                                    rpc_client
                                     .get_transaction_with_config(
                                         &Signature::from_str(
-                                            &txs_sniped[0].signature,
+                                            &tx.signature,
                                         )
                                         .expect("signature"),
                                         RpcTransactionConfig {
@@ -258,45 +260,44 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         },
                                     )
                                     .await
-                                    .expect("get transaction");
+                                    .expect("get transaction")
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        if txs_sniped.is_empty() {
+                            return u64::MAX;
+                        }
+                        let txs_sniped = join_all(txs_sniped).await;
+                        let tx_sniped = txs_sniped
+                            .iter()
+                            .min_by_key(|tx| tx.slot)
+                            .unwrap();
+
+                        let json_tx =
+                            serde_json::to_value(&first_tx).expect("to json");
+                        let is_mint_tx = json_tx["transaction"]["message"]
+                            ["accountKeys"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(|key| {
+                                key.as_str().unwrap()
+                                    == PUMP_FUN_MINT_AUTHORITY
                             });
 
-                        if let Some(tx_sniped) = tx_sniped {
-                            let json_tx = serde_json::to_value(&first_tx)
-                                .expect("to json");
-                            let is_mint_tx = json_tx["transaction"]
-                                ["message"]["accountKeys"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .any(|key| {
-                                    key.as_str().unwrap()
-                                        == PUMP_FUN_MINT_AUTHORITY
-                                });
-
-                            if is_mint_tx {
-                                let slots_difference =
-                                    tx_sniped.slot - first_tx.slot;
-                                println!(
-                                    "{}: in {}, created: {}, sniped: {}",
-                                    holding.mint,
-                                    slots_difference,
-                                    first_tx.slot,
-                                    tx_sniped.slot
-                                );
-                                slots_difference
-                            } else {
-                                println!(
-                                    "No mint tx found for {}",
-                                    holding.mint
-                                );
-                                u64::MAX
-                            }
-                        } else {
+                        if is_mint_tx {
+                            let slots_difference =
+                                tx_sniped.slot - first_tx.slot;
                             println!(
-                                "No sniped tx found for {}",
-                                holding.mint
+                                "{}: in {}, created: {}, sniped: {}",
+                                holding.mint,
+                                slots_difference,
+                                first_tx.slot,
+                                tx_sniped.slot
                             );
+                            slots_difference
+                        } else {
+                            println!("No mint tx found for {}", holding.mint);
                             u64::MAX
                         }
                     }

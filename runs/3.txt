@@ -1,0 +1,33 @@
+wzWi9Ckb6u7MFV3oEb2bi3GLrXRHrSZPa9pcvAtHCNK: in 10, created: 283636301, sniped: 283636311
+BMF27aWcLQG8rF9b6D7YtrxFSixaH8rXN9kwuYacpump: in 2, created: 283638538, sniped: 283638540
+nrTKsz6pdWF1wgfKNah7iKDyqHDj3osJt3efsdmpump: in 2, created: 283635523, sniped: 283635525
+4PKCoTZ8ZBoJdzFXc4s6Gn4ujTicYBR1ZrD2zN85pump: in 2, created: 283633448, sniped: 283633450
+Eu6tn8bMptEYn7Pre3AnBWbVz9pGBnKAoPuXRn9Npump: in 2, created: 283632929, sniped: 283632931
+GLM5rhuiXyAJoygLQ12JR7CCwjma7FuK9FBwSxPSbht4: in 4, created: 283637880, sniped: 283637884
+45go1qGx1qtgZ3W2Ekn7r8yA1Sfg9EdiR2CmPN1epump: in 2, created: 283636697, sniped: 283636699
+B6Q5H8E7DMwCDA42b7uCKvtkQVEiRrwmu5KQRgtVpump: in 11, created: 283638656, sniped: 283638667
+GQ2nvrKHiFGv82QXrTejngCaroVgLvhWe4GDKRAEnnSb: in 1, created: 283631578, sniped: 283631579
+4p1xvw92Q3MEgSXQktZBwPRyo8NQTqivf8Tm3DxAfviq: in 5, created: 283632108, sniped: 283632113
+BdGJ451mGHgP3H6Kpzoo4HugxB1eXspGQWSTiYompump: in 1, created: 283632748, sniped: 283632749
+9aCPKMCmGpgE7kQFcjupVYaT1NZw8bs1CMBvnonepump: in 2, created: 283634059, sniped: 283634061
+3pM8zS8rMfVdRwkc94UjxMGmXigNP2gqLkiNRJiypump: in 2, created: 283634340, sniped: 283634342
+GKoUgjqWSa8eTBN1Q8cLUJ1RWempkRKQfrHCqYsJpump: in 2, created: 283633927, sniped: 283633929
+EqkAuNYuSbhsGKw7nd5BA6dyeHRLTzLEJ5UbCA8ppump: in 3, created: 283639009, sniped: 283639012
+FiK6zk1QsuW7KgPHJFTKLCKUFw8wN2ryT3ABKjk9Pyz8: in 2, created: 283637250, sniped: 283637252
+BUbHWTRn1fzC6WSGRV3cCWfQNGMrdWyd5tSBybjepump: in 2, created: 283635841, sniped: 283635843
+9WGStdSq1NrwP2C5MitEbzfCN9gDENj4z8WW3sXmqe1y: in 1, created: 283639004, sniped: 283639005
+46caoUJ2qx79MN5WpM5aioePP4J5seuYicGw13tQpump: in 5, created: 283635699, sniped: 283635704
+ACZd5GXUburYuhyDsTwzqhgoXzh7awk8Y9XfQ57apump: in 2, created: 283635275, sniped: 283635277
+7vFhMCEkDTUSYe8pTEJGrfkqQbi9kMVWSnCmQzWCpump: in 2, created: 283637324, sniped: 283637326
+8UhR1UadFRLKc2FwkjX4FTW82iUjbNNgWGoRjqQy5Vq: in 9, created: 283632559, sniped: 283632568
+C3Cj6H94P9AjVtBQXwAC4QPsYNpX3NcGRWejhTddueim: in 2, created: 283639052, sniped: 283639054
+31hCi7EQq8D4xmMTLsfc8TiX1CTW8odK4mnWJiYrpump: in 19, created: 283639163, sniped: 283639182
+6LwbxvPsqK2yrLakrmosk3cmzrbtEBB7AKEDcRLeQK38: in 4, created: 283639193, sniped: 283639197
+Be76htSkUFzCW5didc5mUt4dbe9qNAeyuVg56U2XHMRx: in 2, created: 283636543, sniped: 283636545
+BKGBmkrSwx6bHHx2ifcCHjbJPuC7TFC6eHx6xMT3pump: in 2, created: 283638800, sniped: 283638802
+4pkb8btYwWzioLqS3cqobZvhpy5CxzkbD542bXizd13E: in 2, created: 283633696, sniped: 283633698
+CKtZ6S51deuuUgo5U6xBSwduaHYRLgoMSyXKwbp5pump: in 1, created: 283633799, sniped: 283633800
+EV4Vt5FbXrkX9N5eYBLKnhsKvCTxEB4mrukrg15upump: in 3, created: 283639144, sniped: 283639147
+Total tokens analyzed: 30
+Average snipe slots: 3.63
+
