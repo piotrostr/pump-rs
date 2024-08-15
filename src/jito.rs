@@ -114,6 +114,7 @@ pub fn subscribe_tips(dynamic_tip: Arc<RwLock<u64>>) -> JoinHandle<()> {
     })
 }
 
+#[timed::timed(duration(printer = "info!"))]
 pub async fn send_out_bundle_to_all_regions(
     bundle: &[Transaction],
 ) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error::Error>> {

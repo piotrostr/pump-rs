@@ -7,7 +7,7 @@ use solana_sdk::instruction::Instruction;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
-use solana_sdk::transaction::{Transaction, VersionedTransaction};
+use solana_sdk::transaction::Transaction;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -41,8 +41,8 @@ pub fn make_deadline_tx(
     deadline: u64,
     latest_blockhash: Hash,
     keypair: &Keypair,
-) -> VersionedTransaction {
-    VersionedTransaction::from(Transaction::new_signed_with_payer(
+) -> Transaction {
+    Transaction::new_signed_with_payer(
         &[Instruction::new_with_bytes(
             Pubkey::from_str(SLOT_CHECKER_MAINNET).expect("pubkey"),
             &deadline.to_le_bytes(),
@@ -51,5 +51,5 @@ pub fn make_deadline_tx(
         Some(&keypair.pubkey()),
         &[keypair],
         latest_blockhash,
-    ))
+    )
 }
