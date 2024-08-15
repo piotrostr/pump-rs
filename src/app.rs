@@ -15,6 +15,10 @@ pub struct Args {}
 
 #[derive(Debug, Parser)]
 pub enum Command {
+    BundleStatus {
+        #[arg(long)]
+        bundle_id: String,
+    },
     SubscribeTip {},
     GetTx {
         #[arg(long)]

@@ -8,6 +8,7 @@ use log::LevelFilter;
 use pump_rs::bench;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
 use pump_rs::constants::TOKEN_PROGRAM;
+use pump_rs::jito::get_bundle_status;
 use pump_rs::jito::subscribe_tips;
 use pump_rs::seller;
 use pump_rs::seller::get_tx_with_retries;
@@ -72,6 +73,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::BundleStatus { bundle_id } => {
+            get_bundle_status(bundle_id).await?;
+        }
         Command::SubscribeTip {} => {
             let tip = Arc::new(RwLock::new(0u64));
             subscribe_tips(tip).await?;

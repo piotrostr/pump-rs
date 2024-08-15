@@ -154,12 +154,55 @@ pub async fn send_out_bundle_to_all_regions(
                 .send()
                 .await
                 .expect("send bundle");
-            // .json::<serde_json::Value>()
-            // .await
-            // .expect("json");
-            info!("{}", res.status());
+            let status = res.status();
+            info!("{}", status);
             info!("Sent bundle to {}: {:?}", leader_url, res);
+            let body = res.json::<serde_json::Value>().await.expect("json");
+            info!("Response body: {:?}", body);
         });
     }
+    Ok(())
+}
+
+///     curl https://mainnet.block-engine.jito.wtf/api/v1/bundles -X POST -H "Content-Type: application/json" -d '
+/// {
+///   "jsonrpc": "2.0",
+///   "id": 1,
+///   "method": "getInflightBundleStatuses",
+///   "params": [
+///     [
+///     "b31e5fae4923f345218403ac1ab242b46a72d4f2a38d131f474255ae88f1ec9a",
+///     "e3c4d7933cf3210489b17307a14afbab2e4ae3c67c9e7157156f191f047aa6e8",
+///     "a7abecabd9a165bc73fd92c809da4dc25474e1227e61339f02b35ce91c9965e2",
+///     "e3934d2f81edbc161c2b8bb352523cc5f74d49e8d4db81b222c553de60a66514",
+///     "2cd515429ae99487dfac24b170248f6929e4fd849aa7957cccc1daf75f666b54"
+///     ]
+///   ]
+/// }
+/// '
+pub async fn get_bundle_status(
+    bundle_id: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let client = reqwest::Client::new();
+    let res = client
+        .post("https://mainnet.block-engine.jito.wtf/api/v1/bundles")
+        .header("content-type", "application/json")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getInflightBundleStatuses",
+            "params": [[bundle_id]]
+        }))
+        .send()
+        .await
+        .expect("send bundle");
+
+    info!(
+        "{}, {}: {:?}",
+        bundle_id,
+        res.status(),
+        res.json::<serde_json::Value>().await?
+    );
+
     Ok(())
 }
