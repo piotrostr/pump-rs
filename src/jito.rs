@@ -1,5 +1,6 @@
 use fastwebsockets::OpCode;
 use futures_util::StreamExt;
+use log::debug;
 use serde_json::json;
 use solana_sdk::transaction::Transaction;
 use solana_transaction_status::Encodable;
@@ -115,14 +116,14 @@ pub fn subscribe_tips(dynamic_tip: Arc<RwLock<u64>>) -> JoinHandle<()> {
 
 pub async fn send_out_bundle_to_all_regions(
     bundle: &[Transaction],
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error::Error>> {
     let client = Arc::new(RwLock::new(reqwest::Client::new()));
-    let leader_regions = [""]; // ["amsterdam", "ny", "frankfurt", "tokyo", "slc"];
+    let leader_regions = ["amsterdam", "ny", "frankfurt", "tokyo", "slc"];
     let leader_urls = leader_regions
         .iter()
         .map(|region| {
             format!(
-                "https://{}mainnet.block-engine.jito.wtf/api/v1/bundles",
+                "https://{}.mainnet.block-engine.jito.wtf/api/v1/bundles",
                 region
             )
         })
@@ -136,32 +137,35 @@ pub async fn send_out_bundle_to_all_regions(
         })
         .collect::<Vec<_>>();
 
-    for leader_url in leader_urls {
-        let leader_url = leader_url.clone();
-        let bundle = bundle.clone();
-        let client = client.clone();
-        tokio::spawn(async move {
-            let client = client.read().await;
-            let res = client
-                .post(&leader_url)
-                .header("content-type", "application/json")
-                .json(&json!({
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "sendBundle",
-                    "params": [bundle]
-                }))
-                .send()
-                .await
-                .expect("send bundle");
-            let status = res.status();
-            info!("{}", status);
-            info!("Sent bundle to {}: {:?}", leader_url, res);
-            let body = res.json::<serde_json::Value>().await.expect("json");
-            info!("Response body: {:?}", body);
-        });
-    }
-    Ok(())
+    Ok(leader_urls
+        .iter()
+        .map(|leader_url| {
+            let leader_url = leader_url.clone();
+            let bundle = bundle.clone();
+            let client = client.clone();
+            tokio::spawn(async move {
+                let client = client.read().await;
+                let res = client
+                    .post(&leader_url)
+                    .header("content-type", "application/json")
+                    .json(&json!({
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "sendBundle",
+                        "params": [bundle]
+                    }))
+                    .send()
+                    .await
+                    .expect("send bundle");
+                let status = res.status();
+                debug!("Sent bundle to {}: {:?}", leader_url, res);
+                let body =
+                    res.json::<serde_json::Value>().await.expect("json");
+                info!("Bundle ID: {}, {}", body["result"], status);
+                debug!("response: {:?}", body);
+            })
+        })
+        .collect::<Vec<_>>())
 }
 
 ///     curl https://mainnet.block-engine.jito.wtf/api/v1/bundles -X POST -H "Content-Type: application/json" -d '
@@ -205,4 +209,43 @@ pub async fn get_bundle_status(
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use futures::future::join_all;
+    use solana_client::nonblocking::rpc_client::RpcClient;
+    use solana_sdk::signer::Signer;
+    use solana_sdk::system_instruction::transfer;
+
+    use crate::util::{get_jito_tip_pubkey, init_logger, read_fund_keypair};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn all_bundles() {
+        dotenv::dotenv().ok();
+        init_logger().expect("init logger");
+        info!("testing jito send out");
+        let keypair = read_fund_keypair();
+        let rpc_client =
+            RpcClient::new("https://api.mainnet-beta.solana.com".to_string());
+        let tip = 50000;
+        let transaction = Transaction::new_signed_with_payer(
+            &[
+                transfer(&keypair.pubkey(), &keypair.pubkey(), tip),
+                transfer(&keypair.pubkey(), &get_jito_tip_pubkey(), tip),
+            ],
+            Some(&keypair.pubkey()),
+            &[&keypair],
+            rpc_client
+                .get_latest_blockhash()
+                .await
+                .expect("latest blockhash"),
+        );
+        let handles = send_out_bundle_to_all_regions(&[transaction])
+            .await
+            .expect("send out bundle");
+        join_all(handles).await;
+    }
 }

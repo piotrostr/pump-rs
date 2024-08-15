@@ -1,3 +1,6 @@
+use chrono::Local;
+use env_logger::Builder;
+use log::LevelFilter;
 use rand::rngs::ThreadRng;
 use rand::thread_rng;
 use rand::Rng;
@@ -8,8 +11,11 @@ use solana_client::rpc_response::RpcKeyedAccount;
 use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signature::Keypair;
+use solana_sdk::signer::EncodableKey;
 use std::cell::RefCell;
 use std::error::Error;
+use std::io::Write;
 use std::str::FromStr;
 
 pub fn env(var: &str) -> String {
@@ -117,4 +123,34 @@ pub fn parse_holding(
     } else {
         Err("failed to parse holding".into())
     }
+}
+
+pub fn read_fund_keypair() -> Keypair {
+    Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
+        .expect("read fund keypair")
+}
+
+pub fn init_logger() -> Result<(), Box<dyn Error>> {
+    let logs_level = match std::env::var("RUST_LOG") {
+        Ok(level) => {
+            LevelFilter::from_str(&level).unwrap_or(LevelFilter::Info)
+        }
+        Err(_) => LevelFilter::Info,
+    };
+
+    // in logs, use unix timestamp in ms
+    Builder::from_default_env()
+        .format(|buf, record| {
+            writeln!(
+                buf,
+                "{} [{}] {}",
+                Local::now().timestamp_millis(),
+                record.level(),
+                record.args()
+            )
+        })
+        .filter(None, logs_level)
+        .try_init()?;
+
+    Ok(())
 }

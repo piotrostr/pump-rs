@@ -1,10 +1,7 @@
-use chrono::Local;
-use env_logger::Builder;
 use futures::future::join_all;
 use futures::StreamExt;
 use jito_protos::searcher::SubscribeBundleResultsRequest;
 use jito_searcher_client::get_searcher_client;
-use log::LevelFilter;
 use pump_rs::bench;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
 use pump_rs::constants::TOKEN_PROGRAM;
@@ -16,6 +13,7 @@ use pump_rs::slot::make_deadline_tx;
 use pump_rs::slot::update_slot;
 use pump_rs::snipe;
 use pump_rs::snipe_portal;
+use pump_rs::util::init_logger;
 use pump_rs::util::parse_holding;
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_client::rpc_config::RpcTransactionConfig;
@@ -24,7 +22,6 @@ use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::signature::Signature;
 use solana_transaction_status::UiTransactionEncoding;
 use std::collections::HashSet;
-use std::io::Write;
 use std::{error::Error, str::FromStr, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
 
@@ -48,27 +45,8 @@ use log::{info, warn};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
-    dotenv::from_filename(".env").unwrap();
-
-    let logs_level = match std::env::var("RUST_LOG") {
-        Ok(level) => {
-            LevelFilter::from_str(&level).unwrap_or(LevelFilter::Info)
-        }
-        Err(_) => LevelFilter::Info,
-    };
-    // in logs, use unix timestamp in ms
-    Builder::from_default_env()
-        .format(|buf, record| {
-            writeln!(
-                buf,
-                "{} [{}] {}",
-                Local::now().timestamp_millis(),
-                record.level(),
-                record.args()
-            )
-        })
-        .filter(None, logs_level)
-        .try_init()?;
+    dotenv::from_filename(".env")?;
+    init_logger()?;
 
     let app = App::parse();
 
