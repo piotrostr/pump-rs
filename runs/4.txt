@@ -1,0 +1,11 @@
+XYjiU2P3NRTNCE4dTrr5xkEkPvWVe9Ftjk2JLXqpump: in 2, created: 283736217, sniped: 283736219
+H4iuvWhAiwgT2V8jh5pJCqjA2n8fB57JofZTSCFNpump: in 2, created: 283736301, sniped: 283736303
+EfgERcZ7tBv3p3DS5szRtTSqRvRgBiQ66YXfqYMVpump: in 2, created: 283736207, sniped: 283736209
+DepXa651SNcNsg1SKEJAjoyrvZmTbe1sZX2zANbypump: in 3, created: 283736924, sniped: 283736927
+4SgZrv6WDVgMH1gyoRjqmW838ktR1FF6RWY1q2cjpump: in 1, created: 283736042, sniped: 283736043
+8ancjMk8EmzPj6LQiGWM4WUAARUMkj91BgpK1UFvpump: in 2, created: 283737188, sniped: 283737190
+6rDy3DmrmmGCFfpBYRnC3SRasedwY3Yj8jsypy62pump: in 2, created: 283736642, sniped: 283736644
+BESPqfWZ9L3r8AQfa7CoxXjmTeSR9VnAvv5mogLe6qg: in 2, created: 283737809, sniped: 283737811
+Total tokens analyzed: 8
+Average snipe slots: 2.00
+
