@@ -5,6 +5,7 @@ use jito_searcher_client::get_searcher_client;
 use pump_rs::bench;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
 use pump_rs::constants::TOKEN_PROGRAM;
+use pump_rs::data::look_for_rpc_nodes;
 use pump_rs::jito::get_bundle_status;
 use pump_rs::jito::subscribe_tips;
 use pump_rs::seller;
@@ -15,6 +16,7 @@ use pump_rs::snipe;
 use pump_rs::snipe_portal;
 use pump_rs::util::init_logger;
 use pump_rs::util::parse_holding;
+use pump_rs::wallet::WalletManager;
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_client::rpc_config::RpcTransactionConfig;
 use solana_client::rpc_request::TokenAccountsFilter;
@@ -51,6 +53,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::Wallets {} => {
+            let owner = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
+                .expect("read wallet");
+            let rpc_client =
+                Arc::new(RpcClient::new(env("RPC_URL").to_string()));
+            let manager = WalletManager::new(
+                rpc_client.clone(),
+                Some("../keys".to_string()),
+                owner,
+            );
+
+            manager.balances().await?;
+        }
+        Command::LookForGeyser {} => {
+            look_for_rpc_nodes().await;
+        }
         Command::BundleStatus { bundle_id } => {
             get_bundle_status(bundle_id).await?;
         }

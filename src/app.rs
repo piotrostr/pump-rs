@@ -15,6 +15,8 @@ pub struct Args {}
 
 #[derive(Debug, Parser)]
 pub enum Command {
+    Wallets {},
+    LookForGeyser {},
     BundleStatus {
         #[arg(long)]
         bundle_id: String,
