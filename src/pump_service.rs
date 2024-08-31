@@ -1,5 +1,6 @@
 use crate::jito::{
-    start_bundle_results_listener, subscribe_tips, SearcherClient,
+    send_out_bundle_to_all_regions, start_bundle_results_listener,
+    subscribe_tips, SearcherClient,
 };
 use crate::pump::{self, PumpBuyRequest};
 use crate::slot::make_deadline_tx;
@@ -220,7 +221,6 @@ pub async fn _handle_pump_buy(
         &[wallet],
         *latest_blockhash,
     );
-    // let start = std::time::Instant::now();
     let txs = if let Some(deadline) = deadline {
         vec![
             make_deadline_tx(deadline, *latest_blockhash, wallet),
@@ -233,23 +233,22 @@ pub async fn _handle_pump_buy(
         .iter()
         .map(|tx| VersionedTransaction::from(tx.clone()))
         .collect::<Vec<_>>();
-    for _ in 0..2 {
-        let res = send_bundle_no_wait(versioned_txs, searcher_client)
-            .await
-            .expect("send bundle no wait");
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        info!(
-            "Bundle sent. UUID: {} {:#?}",
-            res.into_inner().uuid,
-            versioned_txs
-                .iter()
-                .map(|tx| tx.signatures[0])
-                .collect::<Vec<_>>()
-        );
-    }
-    // send_out_bundle_to_all_regions(&txs).await?;
-    // let elapsed = start.elapsed();
-    // info!("Bundle sent in {:?}", elapsed);
+    let res = send_bundle_no_wait(versioned_txs, searcher_client)
+        .await
+        .expect("send bundle no wait");
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    info!(
+        "Bundle sent through gRPC: {} {:#?}",
+        res.into_inner().uuid,
+        versioned_txs
+            .iter()
+            .map(|tx| tx.signatures[0])
+            .collect::<Vec<_>>()
+    );
+    let start = std::time::Instant::now();
+    send_out_bundle_to_all_regions(&txs).await?;
+    let elapsed = start.elapsed();
+    info!("Bundle sent out through HTTP in {:?}", elapsed);
     Ok(())
 }
 
