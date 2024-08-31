@@ -118,6 +118,11 @@ pub async fn handle_pump_buy_v2(
             .virtual_token_reserves,
         slot: Some(create_pump_token_event.slot),
     };
+    if create_pump_token_event.dev_bought_amount > 1500000000 {
+        return Ok(HttpResponse::Ok().json(json!({
+            "status": "OK, but dev bought amount too high"
+        })));
+    }
     let wallet = state.wallet.lock().await;
     let mut searcher_client = state.searcher_client.lock().await;
     let latest_blockhash = state.latest_blockhash.read().await;
