@@ -372,8 +372,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             )
             .await?;
         }
-        Command::PumpService {} => {
-            pump_service::run_pump_service().await?;
+        Command::PumpService { lamports } => {
+            pump_service::run_pump_service(lamports).await?;
         }
         Command::BumpPump { mint } => {
             let keypair =

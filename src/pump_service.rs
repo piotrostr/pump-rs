@@ -54,6 +54,7 @@ pub struct AppState {
     pub searcher_client: Arc<Mutex<SearcherClient>>,
     pub latest_blockhash: Arc<RwLock<Hash>>,
     pub dynamic_tip: Arc<RwLock<u64>>,
+    pub lamports: u64,
 }
 
 #[get("/blockhash")]
@@ -106,7 +107,6 @@ pub async fn handle_pump_buy_v2(
         "handling pump buy req {}",
         serde_json::to_string_pretty(&create_pump_token_event)?
     );
-    let lamports = 50_000_000;
     let mint = create_pump_token_event.mint;
     let pump_buy_request = PumpBuyRequest {
         mint: create_pump_token_event.mint,
@@ -125,7 +125,7 @@ pub async fn handle_pump_buy_v2(
     let deadline = create_pump_token_event.slot + 1;
     _handle_pump_buy(
         pump_buy_request,
-        lamports,
+        state.lamports,
         *dynamic_tip,
         &wallet,
         &mut searcher_client,
@@ -150,8 +150,6 @@ pub async fn handle_pump_buy(
         "handling pump buy req {}",
         serde_json::to_string_pretty(&pump_buy_request)?
     );
-    let lamports = 50_000_000;
-
     let mint = pump_buy_request.mint;
     let pump_buy_request = pump_buy_request.clone();
     let wallet = state.wallet.lock().await;
@@ -165,7 +163,7 @@ pub async fn handle_pump_buy(
     };
     _handle_pump_buy(
         pump_buy_request,
-        lamports,
+        state.lamports,
         *dynamic_tip,
         &wallet,
         &mut searcher_client,
@@ -250,7 +248,7 @@ pub async fn healthz(request: actix_web::HttpRequest) -> HttpResponse {
     }))
 }
 
-pub async fn run_pump_service() -> std::io::Result<()> {
+pub async fn run_pump_service(lamports: u64) -> std::io::Result<()> {
     // keep all of the state in the app state not to re-init
     let wallet = Arc::new(Mutex::new(
         Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
@@ -274,6 +272,7 @@ pub async fn run_pump_service() -> std::io::Result<()> {
         searcher_client,
         latest_blockhash: Arc::new(RwLock::new(Hash::default())),
         dynamic_tip,
+        lamports,
     });
 
     // poll for latest blockhash to trim 200ms

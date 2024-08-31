@@ -61,7 +61,10 @@ pub enum Command {
         #[clap(long, default_value = "false")]
         burn: bool,
     },
-    PumpService {},
+    PumpService {
+        #[arg(long)]
+        lamports: u64,
+    },
     BumpPump {
         #[arg(long)]
         mint: String,

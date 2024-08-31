@@ -45,7 +45,7 @@ use crate::constants::{
 };
 use crate::util::{
     env, get_jito_tip_pubkey, make_compute_budget_ixs, pubkey_to_string,
-    string_to_pubkey, string_to_u64,
+    string_to_pubkey, /*string_to_u64,*/
 };
 
 #[derive(BorshSerialize)]
