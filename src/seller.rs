@@ -142,7 +142,7 @@ pub async fn get_tx_with_retries(
                 RpcTransactionConfig {
                     encoding: Some(UiTransactionEncoding::Json),
                     commitment: Some(CommitmentConfig::confirmed()),
-                    max_supported_transaction_version: None,
+                    max_supported_transaction_version: Some(0),
                 },
             )
             .await
