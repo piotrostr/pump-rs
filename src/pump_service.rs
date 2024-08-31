@@ -124,7 +124,7 @@ pub async fn handle_pump_buy_v2(
     let mut searcher_client = state.searcher_client.lock().await;
     let latest_blockhash = state.latest_blockhash.read().await;
     let dynamic_tip = state.dynamic_tip.read().await;
-    let deadline = create_pump_token_event.slot /*+ 1*/;
+    let deadline = create_pump_token_event.slot + 1;
     _handle_pump_buy(
         pump_buy_request,
         state.lamports,
