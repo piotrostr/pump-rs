@@ -6,11 +6,13 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: always
+    ports:
+      - 6969:6969
     volumes:
       - .env:/.env
       - ./FAST.json:/FAST.json
       - ./auth.json:/auth.json
-    command: ["./pump-rs", "snipe-portal", "--lamports", "20000000"]
+    command: ["./pump-rs", "pump-service"]
     environment:
       - RUST_LOG=info
   seller:

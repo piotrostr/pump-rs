@@ -63,8 +63,6 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
             .expect("makes searcher client"),
     ));
 
-    // make parametrized as lamports probably, this will be changed to dynamic
-    // tip calculation soon
     let dynamic_tip = Arc::new(RwLock::new(0));
     subscribe_tips(dynamic_tip.clone());
 
@@ -131,6 +129,7 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                         associated_bonding_curve,
                         virtual_token_reserves,
                         virtual_sol_reserves,
+                        slot: None,
                     };
                     // tl;dr
                     // if there is a deadline, might miss bids coz the pumpportal data comes before

@@ -157,6 +157,7 @@ pub async fn snipe_pump(lamports: u64) -> Result<(), Box<dyn Error>> {
                                                 .virtual_token_reserves,
                                             virtual_sol_reserves: coin
                                                 .virtual_sol_reserves,
+                                            slot: None,
                                         },
                                         lamports,
                                         tip,

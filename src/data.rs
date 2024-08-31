@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use log::{info, warn};
+use log::info;
 use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_client::rpc_request::RpcRequest;

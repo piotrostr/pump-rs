@@ -3,6 +3,7 @@ use std::sync::Arc;
 use futures::future::join_all;
 use log::info;
 use solana_client::nonblocking::rpc_client::RpcClient;
+// use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::{EncodableKey, Signer};
 use solana_sdk::transaction::Transaction;
@@ -136,4 +137,13 @@ impl WalletManager {
 
         Ok(())
     }
+
+    // pub async fn snipe(
+    //     &self,
+    //     token_mint: Pubkey,
+    // ) -> Result<(), Box<dyn std::error::Error>> {
+    //     for wallet in self.wallets.iter() {}
+
+    //     Ok(())
+    // }
 }

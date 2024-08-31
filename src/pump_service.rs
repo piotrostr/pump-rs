@@ -1,6 +1,6 @@
 use crate::jito::{
     send_out_bundle_to_all_regions, start_bundle_results_listener,
-    SearcherClient,
+    subscribe_tips, SearcherClient,
 };
 use crate::pump::{self, PumpBuyRequest};
 use crate::slot::make_deadline_tx;
@@ -8,7 +8,7 @@ use crate::util::{get_jito_tip_pubkey, make_compute_budget_ixs};
 use actix_web::web::Data;
 use actix_web::{get, post, web::Json, App, Error, HttpResponse, HttpServer};
 
-use jito_searcher_client::{get_searcher_client, send_bundle_no_wait};
+use jito_searcher_client::get_searcher_client;
 use log::{debug, error, info};
 use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
@@ -17,7 +17,7 @@ use solana_sdk::signature::Keypair;
 use solana_sdk::signer::{EncodableKey, Signer};
 use solana_sdk::system_instruction::transfer;
 
-use solana_sdk::transaction::{Transaction, VersionedTransaction};
+use solana_sdk::transaction::Transaction;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
@@ -51,6 +51,7 @@ pub struct AppState {
     pub wallet: Arc<Mutex<Keypair>>,
     pub searcher_client: Arc<Mutex<SearcherClient>>,
     pub latest_blockhash: Arc<RwLock<Hash>>,
+    pub dynamic_tip: Arc<RwLock<u64>>,
 }
 
 #[get("/blockhash")]
@@ -73,21 +74,26 @@ pub async fn handle_pump_buy(
         serde_json::to_string_pretty(&pump_buy_request)?
     );
     let lamports = 50_000_000;
-    let tip = 200000;
 
     let mint = pump_buy_request.mint;
     let pump_buy_request = pump_buy_request.clone();
     let wallet = state.wallet.lock().await;
     let mut searcher_client = state.searcher_client.lock().await;
     let latest_blockhash = state.latest_blockhash.read().await;
+    let dynamic_tip = state.dynamic_tip.read().await;
+    let deadline = if pump_buy_request.slot.is_some() {
+        Some(pump_buy_request.slot.unwrap() + 1)
+    } else {
+        None
+    };
     _handle_pump_buy(
         pump_buy_request,
         lamports,
-        tip,
+        *dynamic_tip,
         &wallet,
         &mut searcher_client,
         &latest_blockhash,
-        None,
+        deadline,
     )
     .await?;
     Ok(HttpResponse::Ok().json(json!({
@@ -103,7 +109,7 @@ pub async fn _handle_pump_buy(
     lamports: u64,
     tip: u64,
     wallet: &Keypair,
-    searcher_client: &mut SearcherClient,
+    _searcher_client: &mut SearcherClient,
     latest_blockhash: &Hash,
     deadline: Option<u64>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -183,10 +189,14 @@ pub async fn run_pump_service() -> std::io::Result<()> {
 
     start_bundle_results_listener(searcher_client.clone()).await;
 
+    let dynamic_tip = Arc::new(RwLock::new(0));
+    subscribe_tips(dynamic_tip.clone());
+
     let app_state = Data::new(AppState {
         wallet,
         searcher_client,
         latest_blockhash: Arc::new(RwLock::new(Hash::default())),
+        dynamic_tip,
     });
 
     // poll for latest blockhash to trim 200ms

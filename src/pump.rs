@@ -338,6 +338,8 @@ pub struct PumpBuyRequest {
     pub virtual_token_reserves: u64,
     #[serde(deserialize_with = "string_to_u64")]
     pub virtual_sol_reserves: u64,
+
+    pub slot: Option<u64>,
 }
 
 pub async fn buy_pump_token(
