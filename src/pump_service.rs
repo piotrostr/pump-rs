@@ -1,6 +1,5 @@
 use crate::jito::{
-    send_out_bundle_to_all_regions, start_bundle_results_listener,
-    subscribe_tips, SearcherClient,
+    start_bundle_results_listener, subscribe_tips, SearcherClient,
 };
 use crate::pump::{self, PumpBuyRequest};
 use crate::slot::make_deadline_tx;
@@ -134,6 +133,8 @@ pub async fn handle_pump_buy_v2(
         &mut searcher_client,
         &latest_blockhash,
         Some(deadline),
+        0,
+        1,
     )
     .await?;
 
@@ -172,6 +173,8 @@ pub async fn handle_pump_buy(
         &mut searcher_client,
         &latest_blockhash,
         deadline,
+        69,
+        3,
     )
     .await?;
     Ok(HttpResponse::Ok().json(json!({
@@ -197,58 +200,93 @@ pub async fn _handle_pump_buy(
     searcher_client: &mut SearcherClient,
     latest_blockhash: &Hash,
     deadline: Option<u64>,
+    jitter: u64,
+    num_tries: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // Calculate token amount once, using the original lamports value
     let token_amount = pump::get_token_amount(
         pump_buy_request.virtual_sol_reserves,
         pump_buy_request.virtual_token_reserves,
         None,
         lamports,
     )?;
-    let mut ixs = vec![];
-    ixs.append(&mut make_compute_budget_ixs(1000069, 72014));
-    ixs.append(&mut pump::_make_buy_ixs(
-        wallet.pubkey(),
-        pump_buy_request.mint,
-        pump_buy_request.bonding_curve,
-        pump_buy_request.associated_bonding_curve,
-        token_amount,
-        apply_fee(lamports),
-    )?);
-    ixs.push(transfer(&wallet.pubkey(), &get_jito_tip_pubkey(), tip));
-    let swap_tx = Transaction::new_signed_with_payer(
-        ixs.as_slice(),
-        Some(&wallet.pubkey()),
-        &[wallet],
-        *latest_blockhash,
-    );
-    let txs = if let Some(deadline) = deadline {
-        vec![
-            make_deadline_tx(deadline, *latest_blockhash, wallet),
-            swap_tx,
-        ]
-    } else {
-        vec![swap_tx]
-    };
-    let versioned_txs = &txs
-        .iter()
-        .map(|tx| VersionedTransaction::from(tx.clone()))
-        .collect::<Vec<_>>();
-    let res = send_bundle_no_wait(versioned_txs, searcher_client)
-        .await
-        .expect("send bundle no wait");
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    info!(
-        "Bundle sent through gRPC: {} {:#?}",
-        res.into_inner().uuid,
-        versioned_txs
+
+    let mut jitter = jitter;
+    for i in 0..num_tries {
+        let mut ixs = vec![];
+        ixs.append(&mut make_compute_budget_ixs(1000069, 72014));
+        ixs.append(&mut pump::_make_buy_ixs(
+            wallet.pubkey(),
+            pump_buy_request.mint,
+            pump_buy_request.bonding_curve,
+            pump_buy_request.associated_bonding_curve,
+            token_amount,
+            // add random lamports in order to arrive at different sigs
+            // (jito pubkey itself probably works too)
+            apply_fee(lamports) + jitter,
+        )?);
+        ixs.push(transfer(&wallet.pubkey(), &get_jito_tip_pubkey(), tip));
+
+        let swap_tx = Transaction::new_signed_with_payer(
+            ixs.as_slice(),
+            Some(&wallet.pubkey()),
+            &[wallet],
+            *latest_blockhash,
+        );
+
+        let txs = if let Some(deadline) = deadline {
+            vec![
+                make_deadline_tx(deadline, *latest_blockhash, wallet),
+                swap_tx,
+            ]
+        } else {
+            vec![swap_tx]
+        };
+
+        let versioned_txs: Vec<VersionedTransaction> = txs
             .iter()
-            .map(|tx| tx.signatures[0])
-            .collect::<Vec<_>>()
-    );
-    let start = std::time::Instant::now();
-    send_out_bundle_to_all_regions(&txs).await?;
-    let elapsed = start.elapsed();
-    info!("Bundle sent out through HTTP in {:?}", elapsed);
+            .map(|tx| VersionedTransaction::from(tx.clone()))
+            .collect();
+
+        tokio::time::sleep(Duration::from_millis(jitter)).await;
+        let res = send_bundle_no_wait(&versioned_txs, searcher_client)
+            .await
+            .expect("send bundle no wait");
+
+        info!(
+            "Bundle {} sent through gRPC: {} {:#?}",
+            i + 1,
+            res.into_inner().uuid,
+            versioned_txs
+                .iter()
+                .map(|tx| tx.signatures[0])
+                .collect::<Vec<_>>()
+        );
+
+        jitter += 1;
+    }
+
+    // let start = std::time::Instant::now();
+    // for (i, bundle) in bundles.iter().enumerate() {
+    //     let txs: Vec<Transaction> = bundle
+    //         .iter()
+    //         .map(|vtx| {
+    //             Transaction::try_from(vtx.clone())
+    //                 .expect("Failed to convert to Transaction")
+    //         })
+    //         .collect();
+    //     send_out_bundle_to_all_regions(&txs).await?;
+
+    //     info!("Bundle {} sent out through HTTP", i + 1);
+
+    //     // Add jitter between 0 and 200ms
+    //     let jitter = rng.gen_range(0..200);
+    //     tokio::time::sleep(Duration::from_millis(jitter)).await;
+    // }
+
+    // let elapsed = start.elapsed();
+    // info!("All bundles sent out through HTTP in {:?}", elapsed);
+
     Ok(())
 }
 

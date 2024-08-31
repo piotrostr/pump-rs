@@ -165,6 +165,8 @@ pub async fn snipe_pump(lamports: u64) -> Result<(), Box<dyn Error>> {
                                         &mut searcher_client,
                                         &latest_blockhash,
                                         None, // TODO add deadline here too
+                                        0,
+                                        1,
                                     )
                                     .await
                                     .expect("handle pump buy");
