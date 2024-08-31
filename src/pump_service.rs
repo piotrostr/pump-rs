@@ -183,6 +183,13 @@ pub async fn handle_pump_buy(
     })))
 }
 
+/// apply_fee puts the 1% pump fee on the lamports in
+/// e.g. 1 sol -> 1.01 sol
+pub fn apply_fee(lamports: u64) -> u64 {
+    let fee = lamports / 100;
+    lamports + fee
+}
+
 #[timed::timed(duration(printer = "info!"))]
 pub async fn _handle_pump_buy(
     pump_buy_request: PumpBuyRequest,
@@ -199,7 +206,6 @@ pub async fn _handle_pump_buy(
         None,
         lamports,
     )?;
-    let token_amount = (token_amount as f64 * 0.97) as u64;
     let mut ixs = vec![];
     ixs.append(&mut make_compute_budget_ixs(1000069, 72014));
     ixs.append(&mut pump::_make_buy_ixs(
@@ -208,7 +214,7 @@ pub async fn _handle_pump_buy(
         pump_buy_request.bonding_curve,
         pump_buy_request.associated_bonding_curve,
         token_amount,
-        lamports,
+        apply_fee(lamports),
     )?);
     ixs.push(transfer(&wallet.pubkey(), &get_jito_tip_pubkey(), tip));
     let swap_tx = Transaction::new_signed_with_payer(
