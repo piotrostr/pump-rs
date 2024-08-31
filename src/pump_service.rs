@@ -316,7 +316,8 @@ pub async fn run_pump_service(lamports: u64) -> std::io::Result<()> {
             .expect("makes searcher client"),
     ));
 
-    start_bundle_results_listener(searcher_client.clone()).await;
+    // no need if the seller is running
+    // start_bundle_results_listener(searcher_client.clone()).await;
 
     let dynamic_tip = Arc::new(RwLock::new(0));
     subscribe_tips(dynamic_tip.clone());
