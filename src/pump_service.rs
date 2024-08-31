@@ -10,8 +10,10 @@ use actix_web::{get, post, web::Json, App, Error, HttpResponse, HttpServer};
 
 use jito_searcher_client::get_searcher_client;
 use log::{debug, error, info};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
+use solana_sdk::clock::Slot;
 use solana_sdk::hash::Hash;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::{EncodableKey, Signer};
@@ -61,6 +63,81 @@ pub async fn get_blockhash(state: Data<AppState>) -> HttpResponse {
     HttpResponse::Ok().json(json!({
         "blockhash": blockhash.to_string()
     }))
+}
+
+use crate::util::{pubkey_to_string, string_to_pubkey};
+use solana_sdk::pubkey::Pubkey;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreatePumpTokenEvent {
+    pub sig: String,
+    pub slot: Slot,
+    #[serde(
+        serialize_with = "pubkey_to_string",
+        deserialize_with = "string_to_pubkey"
+    )]
+    pub mint: Pubkey,
+    #[serde(
+        serialize_with = "pubkey_to_string",
+        deserialize_with = "string_to_pubkey"
+    )]
+    pub bounding_curve: Pubkey,
+    #[serde(
+        serialize_with = "pubkey_to_string",
+        deserialize_with = "string_to_pubkey"
+    )]
+    pub associated_bounding_curve: Pubkey,
+    pub name: String,
+    pub symbol: String,
+    pub uri: String,
+    pub dev_bought_amount: u64,
+    pub dev_max_sol_cost: u64,
+    pub num_dev_buy_txs: u64,
+    pub virtual_sol_reserves: u64,
+    pub virtual_token_reserves: u64,
+}
+
+#[post("/v2/pump-buy")]
+#[timed::timed(duration(printer = "info!"))]
+pub async fn handle_pump_buy_v2(
+    create_pump_token_event: Json<CreatePumpTokenEvent>,
+    state: Data<AppState>,
+) -> Result<HttpResponse, Error> {
+    info!(
+        "handling pump buy req {}",
+        serde_json::to_string_pretty(&create_pump_token_event)?
+    );
+    let lamports = 50_000_000;
+    let mint = create_pump_token_event.mint;
+    let pump_buy_request = PumpBuyRequest {
+        mint: create_pump_token_event.mint,
+        bonding_curve: create_pump_token_event.bounding_curve,
+        associated_bonding_curve: create_pump_token_event
+            .associated_bounding_curve,
+        virtual_sol_reserves: create_pump_token_event.virtual_sol_reserves,
+        virtual_token_reserves: create_pump_token_event
+            .virtual_token_reserves,
+        slot: Some(create_pump_token_event.slot),
+    };
+    let wallet = state.wallet.lock().await;
+    let mut searcher_client = state.searcher_client.lock().await;
+    let latest_blockhash = state.latest_blockhash.read().await;
+    let dynamic_tip = state.dynamic_tip.read().await;
+    let deadline = create_pump_token_event.slot + 1;
+    _handle_pump_buy(
+        pump_buy_request,
+        lamports,
+        *dynamic_tip,
+        &wallet,
+        &mut searcher_client,
+        &latest_blockhash,
+        Some(deadline),
+    )
+    .await?;
+
+    Ok(HttpResponse::Ok().json(json!({
+    "status": format!(
+        "OK, trigerred buy of {}", mint.to_string())
+    })))
 }
 
 #[post("/pump-buy")]
@@ -210,6 +287,7 @@ pub async fn run_pump_service() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .service(handle_pump_buy)
+            .service(handle_pump_buy_v2)
             .service(get_blockhash)
             .service(healthz)
             .app_data(app_state.clone())
