@@ -229,15 +229,21 @@ pub async fn _handle_pump_buy(
     } else {
         vec![swap_tx]
     };
-    let res = send_bundle_no_wait(
-        &txs.iter()
-            .map(|tx| VersionedTransaction::from(tx.clone()))
-            .collect::<Vec<_>>(),
-        searcher_client,
-    )
-    .await
-    .expect("send bundle no wait");
-    info!("Bundle sent. UUID: {}", res.into_inner().uuid);
+    let versioned_txs = &txs
+        .iter()
+        .map(|tx| VersionedTransaction::from(tx.clone()))
+        .collect::<Vec<_>>();
+    let res = send_bundle_no_wait(versioned_txs, searcher_client)
+        .await
+        .expect("send bundle no wait");
+    info!(
+        "Bundle sent. UUID: {} {:#?}",
+        res.into_inner().uuid,
+        versioned_txs
+            .iter()
+            .map(|tx| tx.signatures[0])
+            .collect::<Vec<_>>()
+    );
     // send_out_bundle_to_all_regions(&txs).await?;
     // let elapsed = start.elapsed();
     // info!("Bundle sent in {:?}", elapsed);
