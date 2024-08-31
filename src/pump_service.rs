@@ -118,7 +118,7 @@ pub async fn handle_pump_buy_v2(
             .virtual_token_reserves,
         slot: Some(create_pump_token_event.slot),
     };
-    if create_pump_token_event.dev_bought_amount > 1_500_000_000 {
+    if create_pump_token_event.dev_max_sol_cost > 1_500_000_000 {
         return Ok(HttpResponse::Ok().json(json!({
             "status": "OK, but dev bought amount too high"
         })));
