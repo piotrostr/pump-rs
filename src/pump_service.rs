@@ -133,8 +133,8 @@ pub async fn handle_pump_buy_v2(
         &mut searcher_client,
         &latest_blockhash,
         Some(deadline),
-        0,
-        1,
+        69,
+        3,
     )
     .await?;
 
