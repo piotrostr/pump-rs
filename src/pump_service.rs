@@ -133,7 +133,7 @@ pub async fn handle_pump_buy_v2(
         &mut searcher_client,
         &latest_blockhash,
         Some(deadline),
-        69,
+        5,
         3,
     )
     .await?;
@@ -223,7 +223,7 @@ pub async fn _handle_pump_buy(
             token_amount,
             // add random lamports in order to arrive at different sigs
             // (jito pubkey itself probably works too)
-            apply_fee(lamports) + jitter,
+            apply_fee(lamports) + jitter + i as u64,
         )?);
         ixs.push(transfer(&wallet.pubkey(), &get_jito_tip_pubkey(), tip));
 
