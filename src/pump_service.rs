@@ -1,6 +1,5 @@
 use crate::jito::{
-    send_out_bundle_to_all_regions, start_bundle_results_listener,
-    subscribe_tips, SearcherClient,
+    start_bundle_results_listener, subscribe_tips, SearcherClient,
 };
 use crate::pump::{self, PumpBuyRequest};
 use crate::slot::make_deadline_tx;
@@ -8,7 +7,7 @@ use crate::util::{get_jito_tip_pubkey, make_compute_budget_ixs};
 use actix_web::web::Data;
 use actix_web::{get, post, web::Json, App, Error, HttpResponse, HttpServer};
 
-use jito_searcher_client::get_searcher_client;
+use jito_searcher_client::{get_searcher_client, send_bundle_no_wait};
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -19,7 +18,7 @@ use solana_sdk::signature::Keypair;
 use solana_sdk::signer::{EncodableKey, Signer};
 use solana_sdk::system_instruction::transfer;
 
-use solana_sdk::transaction::Transaction;
+use solana_sdk::transaction::{Transaction, VersionedTransaction};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
@@ -196,7 +195,7 @@ pub async fn _handle_pump_buy(
     lamports: u64,
     tip: u64,
     wallet: &Keypair,
-    _searcher_client: &mut SearcherClient,
+    searcher_client: &mut SearcherClient,
     latest_blockhash: &Hash,
     deadline: Option<u64>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -223,7 +222,7 @@ pub async fn _handle_pump_buy(
         &[wallet],
         *latest_blockhash,
     );
-    let start = std::time::Instant::now();
+    // let start = std::time::Instant::now();
     let txs = if let Some(deadline) = deadline {
         vec![
             make_deadline_tx(deadline, *latest_blockhash, wallet),
@@ -232,18 +231,18 @@ pub async fn _handle_pump_buy(
     } else {
         vec![swap_tx]
     };
-    // let res = send_bundle_no_wait(
-    //     &txs.iter()
-    //         .map(|tx| VersionedTransaction::from(tx.clone()))
-    //         .collect::<Vec<_>>(),
-    //     searcher_client,
-    // )
-    // .await
-    // .expect("send bundle no wait");
-    send_out_bundle_to_all_regions(&txs).await?;
-    let elapsed = start.elapsed();
-    info!("Bundle sent in {:?}", elapsed);
-    // info!("Bundle sent. UUID: {}", res.into_inner().uuid);
+    let res = send_bundle_no_wait(
+        &txs.iter()
+            .map(|tx| VersionedTransaction::from(tx.clone()))
+            .collect::<Vec<_>>(),
+        searcher_client,
+    )
+    .await
+    .expect("send bundle no wait");
+    info!("Bundle sent. UUID: {}", res.into_inner().uuid);
+    // send_out_bundle_to_all_regions(&txs).await?;
+    // let elapsed = start.elapsed();
+    // info!("Bundle sent in {:?}", elapsed);
     Ok(())
 }
 
