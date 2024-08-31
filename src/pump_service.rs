@@ -204,7 +204,7 @@ pub async fn _handle_pump_buy(
         lamports,
     )?;
     let mut ixs = vec![];
-    // ixs.append(&mut make_compute_budget_ixs(1000069, 72014));
+    ixs.append(&mut make_compute_budget_ixs(1000069, 72014));
     ixs.append(&mut pump::_make_buy_ixs(
         wallet.pubkey(),
         pump_buy_request.mint,
@@ -233,17 +233,20 @@ pub async fn _handle_pump_buy(
         .iter()
         .map(|tx| VersionedTransaction::from(tx.clone()))
         .collect::<Vec<_>>();
-    let res = send_bundle_no_wait(versioned_txs, searcher_client)
-        .await
-        .expect("send bundle no wait");
-    info!(
-        "Bundle sent. UUID: {} {:#?}",
-        res.into_inner().uuid,
-        versioned_txs
-            .iter()
-            .map(|tx| tx.signatures[0])
-            .collect::<Vec<_>>()
-    );
+    for _ in 0..2 {
+        let res = send_bundle_no_wait(versioned_txs, searcher_client)
+            .await
+            .expect("send bundle no wait");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        info!(
+            "Bundle sent. UUID: {} {:#?}",
+            res.into_inner().uuid,
+            versioned_txs
+                .iter()
+                .map(|tx| tx.signatures[0])
+                .collect::<Vec<_>>()
+        );
+    }
     // send_out_bundle_to_all_regions(&txs).await?;
     // let elapsed = start.elapsed();
     // info!("Bundle sent in {:?}", elapsed);
