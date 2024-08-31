@@ -334,9 +334,11 @@ pub struct PumpBuyRequest {
         deserialize_with = "string_to_pubkey"
     )]
     pub associated_bonding_curve: Pubkey,
-    #[serde(deserialize_with = "string_to_u64")]
+    // with typescript service, the data is passed as string
+    // commenting this out since I am passing u64 from rust service now
+    // #[serde(deserialize_with = "string_to_u64")]
     pub virtual_token_reserves: u64,
-    #[serde(deserialize_with = "string_to_u64")]
+    // #[serde(deserialize_with = "string_to_u64")]
     pub virtual_sol_reserves: u64,
 
     pub slot: Option<u64>,
