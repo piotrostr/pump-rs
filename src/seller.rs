@@ -98,7 +98,7 @@ pub async fn run_seller() -> Result<(), Box<dyn Error>> {
                     }
                     let mut sold_cache = sold_cache.write().await;
                     sold_cache.insert(sig.clone(), token_amount);
-                    let token_amount = token_amount * 4 / 5;
+                    // let token_amount = token_amount * 4 / 5;
                     let pump_accounts = mint_to_pump_accounts(&mint);
                     let mut searcher_client = searcher_client.lock().await;
                     let latest_blockhash = *latest_blockhash.read().await;
