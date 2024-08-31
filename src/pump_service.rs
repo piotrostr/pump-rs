@@ -8,7 +8,7 @@ use actix_web::web::Data;
 use actix_web::{get, post, web::Json, App, Error, HttpResponse, HttpServer};
 
 use jito_searcher_client::{get_searcher_client, send_bundle_no_wait};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
@@ -102,10 +102,7 @@ pub async fn handle_pump_buy_v2(
     create_pump_token_event: Json<CreatePumpTokenEvent>,
     state: Data<AppState>,
 ) -> Result<HttpResponse, Error> {
-    info!(
-        "handling pump buy req {}",
-        serde_json::to_string_pretty(&create_pump_token_event)?
-    );
+    info!("handling pump event {}", create_pump_token_event.sig);
     let mint = create_pump_token_event.mint;
     let pump_buy_request = PumpBuyRequest {
         mint: create_pump_token_event.mint,
@@ -118,6 +115,7 @@ pub async fn handle_pump_buy_v2(
         slot: Some(create_pump_token_event.slot),
     };
     if create_pump_token_event.dev_max_sol_cost > 1_500_000_000 {
+        warn!("dev_max_sol_cost too high");
         return Ok(HttpResponse::Ok().json(json!({
             "status": "OK, but dev bought amount too high"
         })));
