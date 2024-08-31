@@ -204,7 +204,7 @@ pub async fn _handle_pump_buy(
         lamports,
     )?;
     let mut ixs = vec![];
-    ixs.append(&mut make_compute_budget_ixs(1000069, 72014));
+    // ixs.append(&mut make_compute_budget_ixs(1000069, 72014));
     ixs.append(&mut pump::_make_buy_ixs(
         wallet.pubkey(),
         pump_buy_request.mint,
