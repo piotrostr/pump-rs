@@ -1,4 +1,4 @@
-use crate::jito::SearcherClient;
+use crate::jito::{send_out_bundle_to_all_regions, SearcherClient};
 use futures_util::stream::StreamExt;
 use jito_protos::searcher::SubscribeBundleResultsRequest;
 use jito_searcher_client::{
@@ -492,7 +492,7 @@ pub async fn sell_pump_token(
     latest_blockhash: Hash,
     pump_accounts: PumpAccounts,
     token_amount: u64,
-    searcher_client: &mut SearcherClient,
+    _searcher_client: &mut SearcherClient,
     tip: u64,
 ) -> Result<(), Box<dyn Error>> {
     let owner = wallet.pubkey();
@@ -509,15 +509,15 @@ pub async fn sell_pump_token(
     ixs.push(sell_ix);
     ixs.push(transfer(&owner, &get_jito_tip_pubkey(), tip));
 
-    let transaction =
-        VersionedTransaction::from(Transaction::new_signed_with_payer(
-            &ixs,
-            Some(&owner),
-            &[wallet],
-            latest_blockhash,
-        ));
+    let tx = Transaction::new_signed_with_payer(
+        &ixs,
+        Some(&owner),
+        &[wallet],
+        latest_blockhash,
+    );
+    // let _versioned_tx = VersionedTransaction::from(tx.clone());
 
-    send_bundle_no_wait(&[transaction], searcher_client).await?;
+    send_out_bundle_to_all_regions(&[tx]).await?;
 
     Ok(())
 }

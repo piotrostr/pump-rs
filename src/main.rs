@@ -306,7 +306,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     // Release the permit after 200ms (5 requests per second)
                     tokio::time::sleep(Duration::from_millis(200)).await;
 
-                    result
+                    // sometimes it messes up, can skip those entries
+                    if result < 200 {
+                        result
+                    } else {
+                        u64::MAX
+                    }
                 })
             });
 
