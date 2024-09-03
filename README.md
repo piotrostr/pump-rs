@@ -2,7 +2,7 @@
 
 bunch of pump.fun related utilities, centered around sniping new launches
 
-i think this is a flex, check [final run](https://github.com/piotrostr/pump-rs/blob/master/runs/final.txt)
+i think this is a flex, check [final run](https://github.com/piotrostr/pump-rs/blob/master/runs/final.txt), all verifiable on `FASTykZyyjVfhutuRzMMYbFbFacQpRnMzDguhWfWadbi`
 
 ## Journey
 
