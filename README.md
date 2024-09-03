@@ -2,7 +2,11 @@
 
 bunch of pump.fun related utilities, centered around sniping new launches
 
+i think this is a flex, check [final run](https://github.com/piotrostr/pump-rs/blob/master/runs/final.txt)
+
 ## Journey
+
+this was a rabbit hole
 
 went from listening on pump.fun stream from the frontend API (avg ~5-10 slots),
 to using pumpportal API for data (avg 1-5 slots) to using a custom on-chain
