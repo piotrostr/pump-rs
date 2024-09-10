@@ -12,7 +12,7 @@ services:
       - .env:/.env
       - ./FAST.json:/FAST.json
       - ./auth.json:/auth.json
-    command: ["./pump-rs", "pump-service", "--lamports", "150000000"]
+    command: ["./pump-rs", "pump-service", "--lamports", "100000000"]
     environment:
       - RUST_LOG=info
   seller:
