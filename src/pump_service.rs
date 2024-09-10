@@ -134,7 +134,7 @@ pub async fn handle_pump_buy_v2(
         &latest_blockhash,
         Some(deadline),
         1,
-        3,
+        1,
     )
     .await?;
 
