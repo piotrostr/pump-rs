@@ -21,8 +21,7 @@ tonic = { version = "0.10", features = [
 ] }
 futures-util = "0.3.30"
 actix-web = "4.8.0"
-# TODO migrate this guy to hyper, dep of fastwebsockets so gotta go with hyper
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "multipart"] }
 spl-associated-token-account = "4.0.0"
 borsh = "1.5.1"
 solana-account-decoder = "2.0.3"
@@ -42,3 +41,4 @@ tokio-native-tls = "0.3.1"
 rand = "0.8.5"
 tracing = "0.1.40"
 bs58 = "0.5.1"
+base64 = "0.22.1"
