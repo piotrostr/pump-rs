@@ -1,23 +1,29 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use borsh::{BorshDeserialize, BorshSerialize};
 use chrono::Utc;
+use log::debug;
 use rand::Rng;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
     signature::Keypair,
     signer::Signer,
+    transaction::Transaction,
 };
 use std::str::FromStr;
 
-use crate::constants::{
-    ASSOCIATED_TOKEN_PROGRAM, EVENT_AUTHORITY, PUMP_FUN_MINT_AUTHORITY,
-    PUMP_FUN_PROGRAM, PUMP_GLOBAL_ADDRESS, RENT_PROGRAM, SYSTEM_PROGRAM_ID,
-    TOKEN_PROGRAM,
+use crate::{constants::PUMP_CREATE_METHOD, util::make_compute_budget_ixs};
+use crate::{
+    constants::{
+        ASSOCIATED_TOKEN_PROGRAM, EVENT_AUTHORITY, PUMP_FUN_MINT_AUTHORITY,
+        PUMP_FUN_PROGRAM, PUMP_GLOBAL_ADDRESS, RENT_PROGRAM,
+        SYSTEM_PROGRAM_ID, TOKEN_PROGRAM,
+    },
+    util::env,
 };
-use crate::util::make_compute_budget_ixs;
 
 pub const MPL_TOKEN_METADATA: &str =
     "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
@@ -72,11 +78,23 @@ fn generate_random_image() -> Vec<u8> {
     image_data
 }
 
-#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
 pub struct PumpCreateTokenIx {
+    pub method_id: [u8; 8],
     pub name: String,
     pub symbol: String,
     pub uri: String,
+}
+
+impl PumpCreateTokenIx {
+    pub fn new(name: String, symbol: String, uri: String) -> Self {
+        Self {
+            method_id: [0x18, 0x1e, 0xc8, 0x28, 0x05, 0x1c, 0x07, 0x77],
+            name,
+            symbol,
+            uri,
+        }
+    }
 }
 
 pub async fn push_image_to_ipfs(
@@ -97,6 +115,12 @@ pub async fn push_image_to_ipfs(
     Ok(res["Hash"].as_str().unwrap().to_string())
 }
 
+pub fn generate_mint() -> (Pubkey, Keypair) {
+    let keypair = Keypair::new();
+    let pubkey = keypair.pubkey();
+    (pubkey, keypair)
+}
+
 pub async fn push_meta_onto_ipfs(
     client: &Client,
     ipfs_meta: &IPFSMeta,
@@ -113,7 +137,7 @@ pub async fn push_meta_onto_ipfs(
         .json::<serde_json::Value>()
         .await?;
 
-    Ok(res["Hash"].as_str().unwrap().to_string())
+    Ok("https://ipfs.io/ipfs/".to_string() + res["Hash"].as_str().unwrap())
 }
 
 pub async fn launch(
@@ -130,48 +154,76 @@ pub async fn launch(
     let image = generate_random_image();
     // Generate and push random image to IPFS
     let client = get_ipfs_client();
-    let image_uri = push_image_to_ipfs(&client, image).await?;
+    let ipfs_hash = push_image_to_ipfs(&client, image).await?;
 
     // Create and push metadata to IPFS
     let ipfs_meta = IPFSMeta::new(
         name.clone(),
         symbol.clone(),
         description.clone(),
-        image_uri.clone(),
+        "https://ipfs.io/ipfs/".to_string() + &ipfs_hash,
         true,
     );
     let metadata_uri = push_meta_onto_ipfs(&client, &ipfs_meta).await?;
+    let (mint, mint_signer) = generate_mint();
 
     ixs.push(_make_create_token_ix(
         name,
         symbol,
         metadata_uri,
-        Pubkey::default(),
-        Pubkey::default(),
-        Pubkey::default(),
-        Pubkey::default(),
+        mint,
         signer.pubkey(),
     ));
 
+    let rpc_client = RpcClient::new(env("RPC_URL"));
+    rpc_client
+        .send_and_confirm_transaction_with_spinner(
+            &Transaction::new_signed_with_payer(
+                &ixs,
+                Some(&signer.pubkey()),
+                &[signer, &mint_signer],
+                rpc_client.get_latest_blockhash().await?,
+            ),
+        )
+        .await?;
+
     Ok(ixs)
+}
+
+pub fn get_bc_and_abc(mint: Pubkey) -> (Pubkey, Pubkey) {
+    let (bonding_curve, _) = Pubkey::find_program_address(
+        &[b"bonding-curve", mint.as_ref()],
+        &Pubkey::from_str(PUMP_FUN_PROGRAM).unwrap(),
+    );
+
+    // Derive the associated bonding curve address
+    let associated_bonding_curve =
+        spl_associated_token_account::get_associated_token_address(
+            &bonding_curve,
+            &mint,
+        );
+
+    (bonding_curve, associated_bonding_curve)
 }
 
 pub fn _make_create_token_ix(
     name: String,
     symbol: String,
     metadata_uri: String,
-    metadata: Pubkey,
     mint: Pubkey,
-    bonding_curve: Pubkey,
-    associated_bonding_curve: Pubkey,
     user: Pubkey,
 ) -> Instruction {
     // Construct the instruction data
-    let instruction_data = PumpCreateTokenIx {
-        name,
-        symbol,
-        uri: metadata_uri,
-    };
+    let instruction_data = PumpCreateTokenIx::new(name, symbol, metadata_uri);
+
+    let metadata = derive_metadata_account(&mint);
+    let (bonding_curve, associated_bonding_curve) = get_bc_and_abc(mint);
+
+    debug!("instruction_data: {:#?}", instruction_data);
+    // serialize borsh to hex string
+    let mut buffer = Vec::new();
+    instruction_data.serialize(&mut buffer).unwrap();
+    debug!("hex: {}", hex::encode(buffer));
 
     // Create the main instruction
     let accounts = vec![
@@ -212,7 +264,13 @@ pub fn _make_create_token_ix(
             Pubkey::from_str(EVENT_AUTHORITY).unwrap(),
             false,
         ),
+        AccountMeta::new_readonly(
+            Pubkey::from_str(PUMP_FUN_PROGRAM).unwrap(),
+            false,
+        ),
     ];
+
+    debug!("accounts: {:#?}", accounts);
 
     Instruction::new_with_borsh(
         Pubkey::from_str(PUMP_FUN_PROGRAM).unwrap(),
@@ -244,18 +302,48 @@ fn get_ipfs_client() -> Client {
         .expect("Failed to create IPFS client")
 }
 
+pub fn derive_metadata_account(mint: &Pubkey) -> Pubkey {
+    let metaplex_program_id = Pubkey::from_str(MPL_TOKEN_METADATA).unwrap();
+
+    Pubkey::find_program_address(
+        &[b"metadata", metaplex_program_id.as_ref(), mint.as_ref()],
+        &metaplex_program_id,
+    )
+    .0
+}
+
 #[cfg(test)]
 mod tests {
+    use solana_sdk::signer::EncodableKey;
+
+    use crate::util::{env, init_logger};
+
     use super::*;
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_launch() {
+        dotenv::dotenv().ok();
+        std::env::set_var("RUST_LOG", "debug");
+        init_logger().ok();
+        let signer =
+            Keypair::read_from_file(env("FUND_KEYPAIR_PATH")).unwrap();
+        let ixs = launch(
+            "name".to_string(),
+            "symbol".to_string(),
+            "description".to_string(),
+            &signer,
+        )
+        .await
+        .unwrap();
+    }
 
     #[tokio::test]
     async fn test_push_image_to_ipfs() {
         let client = get_ipfs_client();
         let image = generate_random_image();
         let res = push_image_to_ipfs(&client, image).await.unwrap();
-        println!("res: {}", res);
         assert_eq!(res.len(), 46);
-        panic!();
     }
 
     #[tokio::test]
@@ -272,5 +360,44 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.len(), 46);
+    }
+
+    #[test]
+    fn test_generate_mint() {
+        let (pubkey, keypair) = generate_mint();
+        assert_eq!(pubkey, keypair.pubkey());
+    }
+
+    #[test]
+    fn test_get_bc_and_abc() {
+        let mint =
+            Pubkey::from_str("HUWAi6tdC3xW3gWG8G2W6HwhyNe9jf98m1ZRvoNtpump")
+                .unwrap();
+        let (bc, abc) = get_bc_and_abc(mint);
+        assert!(bc != abc);
+        assert_eq!(
+            bc,
+            Pubkey::from_str("DtfrDvHPqgDr85ySYBW4ZqnvFKxQ88taTGA7Nu6wQQFD")
+                .unwrap()
+        );
+        assert_eq!(
+            abc,
+            Pubkey::from_str("HJcYNkA5EMcf2sqRdfkXktuXCDfxHcBTMSQY7G2dXxgo")
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn test_instruction_data_format() {
+        let name = "SCAMMER".to_string();
+        let symbol = "SAHIL".to_string();
+        let uri = "https://ipfs.io/ipfs/Qme6bpTaHjLafj3pdYvcFCAk6Kn33ckdWDEJxQDTYc95uF".to_string();
+
+        let ix_data = PumpCreateTokenIx::new(name, symbol, uri);
+        let mut buffer = Vec::new();
+        ix_data.serialize(&mut buffer).unwrap();
+
+        let expected = "181ec828051c0777070000005343414d4d455205000000534148494c4300000068747470733a2f2f697066732e696f2f697066732f516d653662705461486a4c61666a3370645976634643416b364b6e3333636b645744454a78514454596339357546";
+        assert_eq!(hex::encode(buffer), expected);
     }
 }

@@ -29,6 +29,8 @@ pub const PUMP_BUY_METHOD: [u8; 8] =
     [0x66, 0x06, 0x3d, 0x12, 0x01, 0xda, 0xeb, 0xea];
 pub const PUMP_SELL_METHOD: [u8; 8] =
     [0x33, 0xe6, 0x85, 0xa4, 0x01, 0x7f, 0x83, 0xad];
+pub const PUMP_CREATE_METHOD: [u8; 8] =
+    [0x18, 0x1e, 0xc8, 0x28, 0x05, 0x00, 0x00, 0x00];
 pub const TOKEN_PROGRAM: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 pub const RENT_PROGRAM: &str = "SysvarRent111111111111111111111111111111111";
 pub const ASSOCIATED_TOKEN_PROGRAM: &str =

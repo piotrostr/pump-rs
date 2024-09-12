@@ -1,6 +1,4 @@
-use crate::jito::{
-    start_bundle_results_listener, subscribe_tips, SearcherClient,
-};
+use crate::jito::{subscribe_tips, SearcherClient};
 use crate::pump::{self, PumpBuyRequest};
 use crate::slot::make_deadline_tx;
 use crate::util::{get_jito_tip_pubkey, make_compute_budget_ixs};
