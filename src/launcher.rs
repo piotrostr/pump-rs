@@ -1,6 +1,5 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use borsh::{BorshDeserialize, BorshSerialize};
-use chrono::Utc;
 use log::debug;
 use rand::Rng;
 use reqwest::Client;
@@ -15,7 +14,7 @@ use solana_sdk::{
 };
 use std::str::FromStr;
 
-use crate::{constants::PUMP_CREATE_METHOD, util::make_compute_budget_ixs};
+use crate::util::make_compute_budget_ixs;
 use crate::{
     constants::{
         ASSOCIATED_TOKEN_PROGRAM, EVENT_AUTHORITY, PUMP_FUN_MINT_AUTHORITY,
@@ -31,32 +30,25 @@ pub const MPL_TOKEN_METADATA: &str =
 pub const METADATA: &str = "GgrH3ApmK1SYJVZNEuUavbZQx4Yt8WoBz3tkRuLKwj45";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IPFSMeta {
+pub struct IPFSMetaForm {
     pub name: String,
     pub symbol: String,
     pub description: String,
-    pub image: String,
-    pub show_name: bool,
-    pub created_on: String,
     pub twitter: String,
+    pub telegram: String,
     pub website: String,
+    #[serde(rename = "showName")]
+    pub show_name: bool,
 }
 
-impl IPFSMeta {
-    pub fn new(
-        name: String,
-        symbol: String,
-        description: String,
-        image: String,
-        show_name: bool,
-    ) -> Self {
+impl IPFSMetaForm {
+    pub fn new(name: String, symbol: String, description: String) -> Self {
         Self {
             name,
             symbol,
             description,
-            image,
-            show_name,
-            created_on: Utc::now().to_rfc3339(),
+            show_name: true,
+            telegram: String::new(),
             twitter: String::new(),
             website: String::new(),
         }
@@ -115,15 +107,9 @@ pub async fn push_image_to_ipfs(
     Ok(res["Hash"].as_str().unwrap().to_string())
 }
 
-pub fn generate_mint() -> (Pubkey, Keypair) {
-    let keypair = Keypair::new();
-    let pubkey = keypair.pubkey();
-    (pubkey, keypair)
-}
-
 pub async fn push_meta_onto_ipfs(
     client: &Client,
-    ipfs_meta: &IPFSMeta,
+    ipfs_meta: &IPFSMetaForm,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let data = serde_json::to_vec(ipfs_meta)?;
     let form = reqwest::multipart::Form::new()
@@ -140,12 +126,51 @@ pub async fn push_meta_onto_ipfs(
     Ok("https://ipfs.io/ipfs/".to_string() + res["Hash"].as_str().unwrap())
 }
 
+pub async fn push_meta_to_pump_ipfs(
+    client: &Client,
+    ipfs_meta: &IPFSMetaForm,
+    image: Vec<u8>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let form = reqwest::multipart::Form::new()
+        .text("name", ipfs_meta.name.clone())
+        .text("symbol", ipfs_meta.symbol.clone())
+        .text("description", ipfs_meta.description.clone())
+        .text("twitter", ipfs_meta.twitter.clone())
+        .text("telegram", ipfs_meta.telegram.clone())
+        .text("website", ipfs_meta.website.clone())
+        .text("showName", ipfs_meta.show_name.to_string())
+        .part(
+            "file",
+            reqwest::multipart::Part::bytes(image)
+                .file_name("image.png")
+                .mime_str("image/png")?,
+        );
+
+    let res = client
+        .post("https://pump.fun/api/ipfs")
+        .multipart(form)
+        .send()
+        .await?
+        .json::<serde_json::Value>()
+        .await?;
+
+    println!("res: {:#?}", res);
+
+    Ok(res["metadataUri"].as_str().unwrap().to_string())
+}
+
+pub fn generate_mint() -> (Pubkey, Keypair) {
+    let keypair = Keypair::new();
+    let pubkey = keypair.pubkey();
+    (pubkey, keypair)
+}
+
 pub async fn launch(
     name: String,
     symbol: String,
     description: String,
     signer: &Keypair,
-) -> Result<Vec<Instruction>, Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut ixs = vec![];
 
     // Add compute budget instructions
@@ -154,17 +179,10 @@ pub async fn launch(
     let image = generate_random_image();
     // Generate and push random image to IPFS
     let client = get_ipfs_client();
-    let ipfs_hash = push_image_to_ipfs(&client, image).await?;
-
-    // Create and push metadata to IPFS
-    let ipfs_meta = IPFSMeta::new(
-        name.clone(),
-        symbol.clone(),
-        description.clone(),
-        "https://ipfs.io/ipfs/".to_string() + &ipfs_hash,
-        true,
-    );
-    let metadata_uri = push_meta_onto_ipfs(&client, &ipfs_meta).await?;
+    let ipfs_meta =
+        IPFSMetaForm::new(name.clone(), symbol.clone(), description);
+    let metadata_uri =
+        push_meta_to_pump_ipfs(&client, &ipfs_meta, image).await?;
     let (mint, mint_signer) = generate_mint();
 
     ixs.push(_make_create_token_ix(
@@ -187,7 +205,7 @@ pub async fn launch(
         )
         .await?;
 
-    Ok(ixs)
+    Ok(())
 }
 
 pub fn get_bc_and_abc(mint: Pubkey) -> (Pubkey, Pubkey) {
@@ -328,7 +346,7 @@ mod tests {
         init_logger().ok();
         let signer =
             Keypair::read_from_file(env("FUND_KEYPAIR_PATH")).unwrap();
-        let ixs = launch(
+        launch(
             "name".to_string(),
             "symbol".to_string(),
             "description".to_string(),
@@ -336,6 +354,21 @@ mod tests {
         )
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_push_meta_to_pump_ipfs() {
+        let client = get_ipfs_client();
+        let ipfs_meta = IPFSMetaForm::new(
+            "name".to_string(),
+            "symbol".to_string(),
+            "description".to_string(),
+        );
+        let image = generate_random_image();
+        let metadata_uri = push_meta_to_pump_ipfs(&client, &ipfs_meta, image)
+            .await
+            .unwrap();
+        assert_eq!(metadata_uri.len(), 67);
     }
 
     #[tokio::test]
@@ -349,16 +382,12 @@ mod tests {
     #[tokio::test]
     async fn test_push_meta_onto_ipfs() {
         let client = get_ipfs_client();
-        let ipfs_meta = super::IPFSMeta::new(
+        let ipfs_meta = IPFSMetaForm::new(
             "name".to_string(),
             "symbol".to_string(),
             "description".to_string(),
-            "image".to_string(),
-            true,
         );
-        let res = super::push_meta_onto_ipfs(&client, &ipfs_meta)
-            .await
-            .unwrap();
+        let res = push_meta_onto_ipfs(&client, &ipfs_meta).await.unwrap();
         assert_eq!(res.len(), 46);
     }
 
