@@ -14,20 +14,24 @@ use solana_sdk::{
 };
 use std::str::FromStr;
 
-use crate::util::make_compute_budget_ixs;
 use crate::{
     constants::{
         ASSOCIATED_TOKEN_PROGRAM, EVENT_AUTHORITY, PUMP_FUN_MINT_AUTHORITY,
         PUMP_FUN_PROGRAM, PUMP_GLOBAL_ADDRESS, RENT_PROGRAM,
         SYSTEM_PROGRAM_ID, TOKEN_PROGRAM,
     },
+    pump::get_token_amount,
     util::env,
 };
+use crate::{pump::_make_buy_ixs, util::make_compute_budget_ixs};
 
 pub const MPL_TOKEN_METADATA: &str =
     "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
 // this might be derived
 pub const METADATA: &str = "GgrH3ApmK1SYJVZNEuUavbZQx4Yt8WoBz3tkRuLKwj45";
+
+pub const DEFAULT_SOL_INITIAL_RESERVES: u64 = 30_000_000_000;
+pub const DEFAULT_TOKEN_INITIAL_RESERVES: u64 = 1_073_000_000_000_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IPFSMetaForm {
@@ -154,8 +158,6 @@ pub async fn push_meta_to_pump_ipfs(
         .json::<serde_json::Value>()
         .await?;
 
-    println!("res: {:#?}", res);
-
     Ok(res["metadataUri"].as_str().unwrap().to_string())
 }
 
@@ -170,6 +172,7 @@ pub async fn launch(
     symbol: String,
     description: String,
     signer: &Keypair,
+    dev_buy: Option<u64>, // lamports
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut ixs = vec![];
 
@@ -192,6 +195,26 @@ pub async fn launch(
         mint,
         signer.pubkey(),
     ));
+
+    if let Some(dev_buy) = dev_buy {
+        let (bonding_curve, associated_bonding_curve) = get_bc_and_abc(mint);
+        let token_amount = get_token_amount(
+            DEFAULT_SOL_INITIAL_RESERVES,
+            DEFAULT_TOKEN_INITIAL_RESERVES,
+            None,
+            dev_buy,
+        )?;
+        debug!("dev_buy: {}", dev_buy);
+        debug!("token_amount: {}", token_amount);
+        ixs.append(&mut _make_buy_ixs(
+            signer.pubkey(),
+            mint,
+            bonding_curve,
+            associated_bonding_curve,
+            token_amount,
+            dev_buy * 101 / 100, // apply 1% fee
+        )?);
+    }
 
     let rpc_client = RpcClient::new(env("RPC_URL"));
     rpc_client
@@ -331,12 +354,31 @@ pub fn derive_metadata_account(mint: &Pubkey) -> Pubkey {
 }
 
 #[cfg(test)]
-mod tests {
+mod launcher_tests {
     use solana_sdk::signer::EncodableKey;
 
     use crate::util::{env, init_logger};
 
     use super::*;
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_launch_with_buy() {
+        dotenv::dotenv().ok();
+        std::env::set_var("RUST_LOG", "debug");
+        init_logger().ok();
+        let signer =
+            Keypair::read_from_file(env("FUND_KEYPAIR_PATH")).unwrap();
+        launch(
+            "fucksnipers".to_string(),
+            "fksnip".to_string(),
+            "snipe this coin to get rugged, orc im waiting".to_string(),
+            &signer,
+            Some(500000000),
+        )
+        .await
+        .unwrap();
+    }
 
     #[tokio::test]
     #[ignore]
@@ -351,6 +393,7 @@ mod tests {
             "symbol".to_string(),
             "description".to_string(),
             &signer,
+            None,
         )
         .await
         .unwrap();
@@ -388,7 +431,7 @@ mod tests {
             "description".to_string(),
         );
         let res = push_meta_onto_ipfs(&client, &ipfs_meta).await.unwrap();
-        assert_eq!(res.len(), 46);
+        assert_eq!(res.len(), 67);
     }
 
     #[test]
