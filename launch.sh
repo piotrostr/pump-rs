@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cargo run --features debug -- launch \
+cargo run -- launch \
     --name "test" \
     --symbol "dupa" \
     --description "sraka" \

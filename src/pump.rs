@@ -277,7 +277,6 @@ pub async fn get_bonding_curve(
     }
 }
 
-#[timed::timed(duration(printer = "info!"))]
 pub fn get_token_amount(
     virtual_sol_reserves: u64,
     virtual_token_reserves: u64,

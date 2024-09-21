@@ -155,6 +155,11 @@ impl WalletManager {
         let mut searcher_client = self.searcher_client.write().await;
         send_bundle_no_wait(&[tx], &mut searcher_client).await?;
 
+        info!(
+            "Funded {} wallets with {} lamports each",
+            wallets_count, amount
+        );
+
         Ok(())
     }
 

@@ -1,7 +1,7 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use borsh::{BorshDeserialize, BorshSerialize};
 use jito_searcher_client::send_bundle_no_wait;
-use log::debug;
+use log::{debug, info};
 use rand::Rng;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -276,12 +276,12 @@ pub async fn launch(
             latest_blockhash,
         ));
 
-    #[cfg(feature = "debug")]
+    #[cfg(feature = "dry-run")]
     {
-        debug!("create_tx: {:#?}", create_tx);
+        info!("create_tx: {:#?}", create_tx);
     }
 
-    #[cfg(not(feature = "debug"))]
+    #[cfg(not(feature = "dry-run"))]
     send_bundle_no_wait(&[create_tx], &mut searcher_client).await?;
 
     if let Some(wallet_manager) = wallet_manager {
@@ -321,14 +321,14 @@ pub async fn launch(
             }
         }
 
-        #[cfg(feature = "debug")]
+        #[cfg(feature = "dry-run")]
         {
-            debug!("first_buy_bundle: {:#?}", first_buy_bundle);
-            debug!("second_buy_bundle: {:#?}", second_buy_bundle);
+            info!("first_buy_bundle: {:#?}", first_buy_bundle);
+            info!("second_buy_bundle: {:#?}", second_buy_bundle);
             return Ok(());
         }
 
-        #[cfg(not(feature = "debug"))]
+        #[cfg(not(feature = "dry-run"))]
         {
             send_bundle_no_wait(&first_buy_bundle, &mut searcher_client)
                 .await?;
