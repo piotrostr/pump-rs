@@ -159,60 +159,78 @@ impl WalletManager {
     }
 
     pub async fn drain(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut instructions = Vec::new();
+        let mut transfer_instructions = Vec::new();
         let mut total_drained = 0;
 
         for wallet in &self.wallets {
             let balance =
                 self.rpc_client.get_balance(&wallet.pubkey()).await?;
             // Ensure there's enough balance to cover the fee
-            instructions.push(solana_sdk::system_instruction::transfer(
-                &wallet.pubkey(),
-                &self.owner.pubkey(),
-                balance,
+            transfer_instructions.push((
+                solana_sdk::system_instruction::transfer(
+                    &wallet.pubkey(),
+                    &self.owner.pubkey(),
+                    balance,
+                ),
+                wallet,
             ));
             total_drained += balance;
         }
 
-        if instructions.is_empty() {
+        if transfer_instructions.is_empty() {
             info!("No wallets with sufficient balance to drain.");
             return Ok(());
         }
 
-        // Add Jito tip
-        instructions.push(solana_sdk::system_instruction::transfer(
-            &self.owner.pubkey(),
-            &get_jito_tip_pubkey(),
-            10_000,
-        ));
-
+        let mut transactions = Vec::new();
         let recent_blockhash = self.rpc_client.get_latest_blockhash().await?;
-        let mut signers = self.wallets.iter().collect::<Vec<&Keypair>>();
-        signers.push(&self.owner);
 
-        let tx =
-            VersionedTransaction::from(Transaction::new_signed_with_payer(
-                &instructions,
-                Some(&self.owner.pubkey()),
-                &signers,
-                recent_blockhash,
+        for chunk in transfer_instructions.chunks(5) {
+            let mut instructions: Vec<solana_sdk::instruction::Instruction> =
+                chunk
+                    .iter()
+                    .map(|(instruction, _)| instruction.clone())
+                    .collect();
+
+            // Add Jito tip for each transaction
+            instructions.push(solana_sdk::system_instruction::transfer(
+                &self.owner.pubkey(),
+                &get_jito_tip_pubkey(),
+                10_000,
             ));
 
-        info!("{:#?}", tx);
-        // simulate tx
-        let _ = self
-            .rpc_client
-            .simulate_transaction(&tx)
-            .await
-            .expect("simulate tx");
+            let mut signers: Vec<&Keypair> =
+                chunk.iter().map(|(_, wallet)| *wallet).collect();
+            signers.push(&self.owner);
+
+            let tx = VersionedTransaction::from(
+                Transaction::new_signed_with_payer(
+                    &instructions,
+                    Some(&self.owner.pubkey()),
+                    &signers,
+                    recent_blockhash,
+                ),
+            );
+
+            info!("Transaction: {:#?}", tx);
+            // simulate tx
+            let _ = self
+                .rpc_client
+                .simulate_transaction(&tx)
+                .await
+                .expect("simulate tx");
+
+            transactions.push(tx);
+        }
 
         let mut searcher_client = self.searcher_client.write().await;
-        send_bundle_no_wait(&[tx], &mut searcher_client).await?;
+        send_bundle_no_wait(&transactions, &mut searcher_client).await?;
 
         info!(
-            "Drained {} lamports from {} wallets",
+            "Drained {} lamports from {} wallets in {} transactions",
             total_drained,
-            &self.wallets.len()
+            &self.wallets.len(),
+            transactions.len()
         );
 
         Ok(())
