@@ -7,6 +7,7 @@ use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
 use pump_rs::constants::TOKEN_PROGRAM;
 use pump_rs::data::look_for_rpc_nodes;
 use pump_rs::jito::get_bundle_status;
+use pump_rs::jito::make_searcher_client;
 use pump_rs::jito::subscribe_tips;
 use pump_rs::launcher;
 use pump_rs::launcher::IPFSMetaForm;
@@ -451,13 +452,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let pump_tokens =
                 pump::get_tokens_held_pump(&keypair.pubkey()).await?;
             info!("Tokens held: {}", pump_tokens.len());
-            let auth = Arc::new(
-                Keypair::read_from_file(env("AUTH_KEYPAIR_PATH")).unwrap(),
-            );
-            let mut searcher_client =
-                get_searcher_client(env("BLOCK_ENGINE_URL").as_str(), &auth)
-                    .await
-                    .expect("makes searcher client");
+            let mut searcher_client = make_searcher_client().await?;
             // poll for bundle results
             let mut bundle_results_stream = searcher_client
                 .subscribe_bundle_results(SubscribeBundleResultsRequest {})
