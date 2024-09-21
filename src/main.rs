@@ -18,7 +18,7 @@ use pump_rs::snipe;
 use pump_rs::snipe_portal;
 use pump_rs::util::init_logger;
 use pump_rs::util::parse_holding;
-use pump_rs::wallet::WalletManager;
+use pump_rs::wallet::make_manager;
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_client::rpc_config::RpcTransactionConfig;
 use solana_client::rpc_request::TokenAccountsFilter;
@@ -66,13 +66,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             dev_buy,
             snipe_buy,
         } => {
+            let wallet_manager = make_manager().await?;
             let signer = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
                 .expect("read wallet");
-            let wallet_manager = WalletManager::new(
-                Arc::new(RpcClient::new(env("RPC_URL").to_string())),
-                Some(env("WALLET_DIRECTORY").to_string()),
-                signer.insecure_clone(),
-            );
 
             launcher::launch(
                 &IPFSMetaForm {
@@ -92,17 +88,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             )
             .await?;
         }
+        Command::WalletsDrain {} => {
+            let manager = make_manager().await?;
+            manager.drain().await?;
+        }
         Command::Wallets {} => {
-            let owner = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
-                .expect("read wallet");
-            let rpc_client =
-                Arc::new(RpcClient::new(env("RPC_URL").to_string()));
-            let manager = WalletManager::new(
-                rpc_client.clone(),
-                Some(env("WALLET_DIRECTORY").to_string()),
-                owner,
-            );
-
+            let manager = make_manager().await?;
             manager.balances().await?;
         }
         Command::LookForGeyser {} => {

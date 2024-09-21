@@ -43,6 +43,7 @@ pub enum Command {
         #[arg(long)]
         snipe_buy: u64,
     },
+    WalletsDrain {},
     Wallets {},
     LookForGeyser {},
     BundleStatus {

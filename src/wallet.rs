@@ -1,25 +1,43 @@
 use std::sync::Arc;
 
 use futures::future::join_all;
+use jito_searcher_client::send_bundle_no_wait;
 use log::info;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::{EncodableKey, Signer};
-use solana_sdk::transaction::Transaction;
+use solana_sdk::transaction::{Transaction, VersionedTransaction};
+use tokio::sync::RwLock;
 
-use crate::jito::send_out_bundle_to_all_regions;
-use crate::util::get_jito_tip_pubkey;
+use crate::jito::{make_searcher_client, SearcherClient};
+use crate::util::{env, get_jito_tip_pubkey};
 
 pub struct WalletManager {
     pub owner: Keypair,
     pub rpc_client: Arc<RpcClient>,
+    pub searcher_client: Arc<RwLock<SearcherClient>>,
     pub wallets: Vec<Keypair>,
     pub wallet_directory: String,
+}
+
+pub async fn make_manager(
+) -> Result<WalletManager, Box<dyn std::error::Error>> {
+    let searcher_client = make_searcher_client().await?;
+    let owner = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
+        .expect("read wallet");
+    let rpc_client = Arc::new(RpcClient::new(env("RPC_URL").to_string()));
+    Ok(WalletManager::new(
+        rpc_client.clone(),
+        Arc::new(RwLock::new(searcher_client)),
+        Some(env("WALLET_DIRECTORY").to_string()),
+        owner,
+    ))
 }
 
 impl WalletManager {
     pub fn new(
         rpc_client: Arc<RpcClient>,
+        searcher_client: Arc<RwLock<SearcherClient>>,
         wallet_directory: Option<String>,
         owner: Keypair,
     ) -> Self {
@@ -41,6 +59,7 @@ impl WalletManager {
         Self {
             owner,
             rpc_client,
+            searcher_client,
             wallets,
             wallet_directory,
         }
@@ -125,14 +144,16 @@ impl WalletManager {
             10_000,
         ));
 
-        let tx = Transaction::new_signed_with_payer(
-            &instructions,
-            Some(&self.owner.pubkey()),
-            &[&self.owner],
-            self.rpc_client.get_latest_blockhash().await?,
-        );
+        let tx =
+            VersionedTransaction::from(Transaction::new_signed_with_payer(
+                &instructions,
+                Some(&self.owner.pubkey()),
+                &[&self.owner],
+                self.rpc_client.get_latest_blockhash().await?,
+            ));
 
-        send_out_bundle_to_all_regions(&[tx]).await?;
+        let mut searcher_client = self.searcher_client.write().await;
+        send_bundle_no_wait(&[tx], &mut searcher_client).await?;
 
         Ok(())
     }
@@ -144,16 +165,13 @@ impl WalletManager {
         for wallet in &self.wallets {
             let balance =
                 self.rpc_client.get_balance(&wallet.pubkey()).await?;
-            if balance > 5000 {
-                // Ensure there's enough balance to cover the fee
-                let amount = balance - 5000; // Leave 5000 lamports for the fee
-                instructions.push(solana_sdk::system_instruction::transfer(
-                    &wallet.pubkey(),
-                    &self.owner.pubkey(),
-                    amount,
-                ));
-                total_drained += amount;
-            }
+            // Ensure there's enough balance to cover the fee
+            instructions.push(solana_sdk::system_instruction::transfer(
+                &wallet.pubkey(),
+                &self.owner.pubkey(),
+                balance,
+            ));
+            total_drained += balance;
         }
 
         if instructions.is_empty() {
@@ -172,19 +190,29 @@ impl WalletManager {
         let mut signers = self.wallets.iter().collect::<Vec<&Keypair>>();
         signers.push(&self.owner);
 
-        let tx = Transaction::new_signed_with_payer(
-            &instructions,
-            Some(&self.owner.pubkey()),
-            &signers,
-            recent_blockhash,
-        );
+        let tx =
+            VersionedTransaction::from(Transaction::new_signed_with_payer(
+                &instructions,
+                Some(&self.owner.pubkey()),
+                &signers,
+                recent_blockhash,
+            ));
 
-        send_out_bundle_to_all_regions(&[tx]).await?;
+        info!("{:#?}", tx);
+        // simulate tx
+        let _ = self
+            .rpc_client
+            .simulate_transaction(&tx)
+            .await
+            .expect("simulate tx");
+
+        let mut searcher_client = self.searcher_client.write().await;
+        send_bundle_no_wait(&[tx], &mut searcher_client).await?;
 
         info!(
             "Drained {} lamports from {} wallets",
             total_drained,
-            instructions.len() - 1
+            &self.wallets.len()
         );
 
         Ok(())

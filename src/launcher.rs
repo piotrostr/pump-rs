@@ -279,7 +279,6 @@ pub async fn launch(
     #[cfg(feature = "debug")]
     {
         debug!("create_tx: {:#?}", create_tx);
-        return Ok(());
     }
 
     #[cfg(not(feature = "debug"))]
