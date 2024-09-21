@@ -3,7 +3,6 @@ use std::sync::Arc;
 use futures::future::join_all;
 use log::info;
 use solana_client::nonblocking::rpc_client::RpcClient;
-// use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::{EncodableKey, Signer};
 use solana_sdk::transaction::Transaction;
@@ -138,12 +137,56 @@ impl WalletManager {
         Ok(())
     }
 
-    // pub async fn snipe(
-    //     &self,
-    //     token_mint: Pubkey,
-    // ) -> Result<(), Box<dyn std::error::Error>> {
-    //     for wallet in self.wallets.iter() {}
+    pub async fn drain(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut instructions = Vec::new();
+        let mut total_drained = 0;
 
-    //     Ok(())
-    // }
+        for wallet in &self.wallets {
+            let balance =
+                self.rpc_client.get_balance(&wallet.pubkey()).await?;
+            if balance > 5000 {
+                // Ensure there's enough balance to cover the fee
+                let amount = balance - 5000; // Leave 5000 lamports for the fee
+                instructions.push(solana_sdk::system_instruction::transfer(
+                    &wallet.pubkey(),
+                    &self.owner.pubkey(),
+                    amount,
+                ));
+                total_drained += amount;
+            }
+        }
+
+        if instructions.is_empty() {
+            info!("No wallets with sufficient balance to drain.");
+            return Ok(());
+        }
+
+        // Add Jito tip
+        instructions.push(solana_sdk::system_instruction::transfer(
+            &self.owner.pubkey(),
+            &get_jito_tip_pubkey(),
+            10_000,
+        ));
+
+        let recent_blockhash = self.rpc_client.get_latest_blockhash().await?;
+        let mut signers = self.wallets.iter().collect::<Vec<&Keypair>>();
+        signers.push(&self.owner);
+
+        let tx = Transaction::new_signed_with_payer(
+            &instructions,
+            Some(&self.owner.pubkey()),
+            &signers,
+            recent_blockhash,
+        );
+
+        send_out_bundle_to_all_regions(&[tx]).await?;
+
+        info!(
+            "Drained {} lamports from {} wallets",
+            total_drained,
+            instructions.len() - 1
+        );
+
+        Ok(())
+    }
 }

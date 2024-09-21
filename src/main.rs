@@ -8,6 +8,8 @@ use pump_rs::constants::TOKEN_PROGRAM;
 use pump_rs::data::look_for_rpc_nodes;
 use pump_rs::jito::get_bundle_status;
 use pump_rs::jito::subscribe_tips;
+use pump_rs::launcher;
+use pump_rs::launcher::IPFSMetaForm;
 use pump_rs::seller;
 use pump_rs::seller::get_tx_with_retries;
 use pump_rs::slot::make_deadline_tx;
@@ -53,6 +55,43 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::Launch {
+            name,
+            symbol,
+            description,
+            telegram,
+            twitter,
+            image_path,
+            website,
+            dev_buy,
+            snipe_buy,
+        } => {
+            let signer = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
+                .expect("read wallet");
+            let wallet_manager = WalletManager::new(
+                Arc::new(RpcClient::new(env("RPC_URL").to_string())),
+                Some(env("WALLET_DIRECTORY").to_string()),
+                signer.insecure_clone(),
+            );
+
+            launcher::launch(
+                &IPFSMetaForm {
+                    name,
+                    symbol,
+                    description,
+                    telegram,
+                    twitter,
+                    website,
+                    show_name: true,
+                },
+                Some(image_path),
+                &signer,
+                Some(dev_buy),
+                Some(&wallet_manager),
+                Some(snipe_buy),
+            )
+            .await?;
+        }
         Command::Wallets {} => {
             let owner = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
                 .expect("read wallet");
@@ -60,7 +99,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 Arc::new(RpcClient::new(env("RPC_URL").to_string()));
             let manager = WalletManager::new(
                 rpc_client.clone(),
-                Some("../keys".to_string()),
+                Some(env("WALLET_DIRECTORY").to_string()),
                 owner,
             );
 
@@ -381,8 +420,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             pump_service::run_pump_service(lamports).await?;
         }
         Command::BumpPump { mint } => {
-            let keypair =
-                Keypair::read_from_file("wtf.json").expect("read wallet");
+            let keypair = Keypair::read_from_file(env("BUMP_KEYPAIR_PATH"))
+                .expect("read wallet");
             let rpc_client = RpcClient::new(env("RPC_URL").to_string());
             let auth = Arc::new(
                 Keypair::read_from_file(env("AUTH_KEYPAIR_PATH")).unwrap(),

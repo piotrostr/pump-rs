@@ -1,7 +1,10 @@
 use fastwebsockets::OpCode;
 use futures_util::StreamExt;
+use jito_searcher_client::get_searcher_client;
 use log::debug;
 use serde_json::json;
+use solana_sdk::signature::Keypair;
+use solana_sdk::signer::EncodableKey;
 use solana_sdk::transaction::Transaction;
 use solana_transaction_status::Encodable;
 use solana_transaction_status::EncodedTransaction;
@@ -19,10 +22,21 @@ use tonic::service::interceptor::InterceptedService;
 use tonic::transport::Channel;
 use tracing::info;
 
+use crate::util::env;
 use crate::ws::connect_to_jito_tip_websocket;
 
 pub type SearcherClient =
     SearcherServiceClient<InterceptedService<Channel, ClientInterceptor>>;
+
+pub async fn make_searcher_client(
+) -> Result<SearcherClient, Box<dyn std::error::Error>> {
+    let auth_keypair =
+        Arc::new(Keypair::read_from_file(env("AUTH_KEYPAIR_PATH"))?);
+    let block_engine_url = env("BLOCK_ENGINE_URL");
+    let searcher_client =
+        get_searcher_client(&block_engine_url, &auth_keypair).await?;
+    Ok(searcher_client)
+}
 
 #[timed::timed(duration(printer = "info!"))]
 pub async fn start_bundle_results_listener(

@@ -1,5 +1,6 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use borsh::{BorshDeserialize, BorshSerialize};
+use jito_searcher_client::send_bundle_no_wait;
 use log::debug;
 use rand::Rng;
 use reqwest::Client;
@@ -10,7 +11,8 @@ use solana_sdk::{
     pubkey::Pubkey,
     signature::Keypair,
     signer::Signer,
-    transaction::Transaction,
+    system_instruction::transfer,
+    transaction::{Transaction, VersionedTransaction},
 };
 use std::str::FromStr;
 
@@ -20,8 +22,10 @@ use crate::{
         PUMP_FUN_PROGRAM, PUMP_GLOBAL_ADDRESS, RENT_PROGRAM,
         SYSTEM_PROGRAM_ID, TOKEN_PROGRAM,
     },
+    jito,
     pump::get_token_amount,
-    util::env,
+    util::{env, get_jito_tip_pubkey},
+    wallet::WalletManager,
 };
 use crate::{pump::_make_buy_ixs, util::make_compute_budget_ixs};
 
@@ -32,6 +36,9 @@ pub const METADATA: &str = "GgrH3ApmK1SYJVZNEuUavbZQx4Yt8WoBz3tkRuLKwj45";
 
 pub const DEFAULT_SOL_INITIAL_RESERVES: u64 = 30_000_000_000;
 pub const DEFAULT_TOKEN_INITIAL_RESERVES: u64 = 1_073_000_000_000_000;
+
+// amount of SOL to fund the wallets with
+pub const FUND_AMOUNT: u64 = 10_000_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IPFSMetaForm {
@@ -167,37 +174,74 @@ pub fn generate_mint() -> (Pubkey, Keypair) {
     (pubkey, keypair)
 }
 
+pub struct PoolState {
+    pub mint: Pubkey,
+    pub bonding_curve: Pubkey,
+    pub associated_bonding_curve: Pubkey,
+    pub virtual_sol_reserves: u64,
+    pub virtual_token_reserves: u64,
+}
+
+impl PoolState {
+    pub fn new(
+        mint: Pubkey,
+        bonding_curve: Pubkey,
+        associated_bonding_curve: Pubkey,
+    ) -> Self {
+        Self {
+            mint,
+            bonding_curve,
+            associated_bonding_curve,
+            virtual_sol_reserves: DEFAULT_SOL_INITIAL_RESERVES,
+            virtual_token_reserves: DEFAULT_TOKEN_INITIAL_RESERVES,
+        }
+    }
+}
+
 pub async fn launch(
-    name: String,
-    symbol: String,
-    description: String,
+    ipfs_meta: &IPFSMetaForm,
+    image_path: Option<String>,
     signer: &Keypair,
     dev_buy: Option<u64>, // lamports
+    wallet_manager: Option<&WalletManager>,
+    snipe_buy: Option<u64>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if wallet_manager.is_some() && snipe_buy.is_none() {
+        return Err("snipe_buy must be set if wallet_manager is set".into());
+    }
+    if let Some(wallet_manager) = wallet_manager {
+        wallet_manager.fund(snipe_buy.unwrap()).await.unwrap();
+    }
+    let mut searcher_client = jito::make_searcher_client().await?;
     let mut ixs = vec![];
 
     // Add compute budget instructions
     ixs.append(&mut make_compute_budget_ixs(542850, 250000));
 
-    let image = generate_random_image();
-    // Generate and push random image to IPFS
+    let image = if let Some(image_path) = image_path {
+        std::fs::read(image_path)?
+    } else {
+        generate_random_image()
+    };
+
     let client = get_ipfs_client();
-    let ipfs_meta =
-        IPFSMetaForm::new(name.clone(), symbol.clone(), description);
     let metadata_uri =
-        push_meta_to_pump_ipfs(&client, &ipfs_meta, image).await?;
+        push_meta_to_pump_ipfs(&client, ipfs_meta, image).await?;
     let (mint, mint_signer) = generate_mint();
 
     ixs.push(_make_create_token_ix(
-        name,
-        symbol,
+        ipfs_meta.name.clone(),
+        ipfs_meta.symbol.clone(),
         metadata_uri,
         mint,
         signer.pubkey(),
     ));
 
+    let (bonding_curve, associated_bonding_curve) = get_bc_and_abc(mint);
+    let mut pool_state =
+        PoolState::new(mint, bonding_curve, associated_bonding_curve);
+
     if let Some(dev_buy) = dev_buy {
-        let (bonding_curve, associated_bonding_curve) = get_bc_and_abc(mint);
         let token_amount = get_token_amount(
             DEFAULT_SOL_INITIAL_RESERVES,
             DEFAULT_TOKEN_INITIAL_RESERVES,
@@ -212,23 +256,99 @@ pub async fn launch(
             bonding_curve,
             associated_bonding_curve,
             token_amount,
-            dev_buy * 101 / 100, // apply 1% fee
+            apply_fee(dev_buy),
         )?);
+
+        pool_state.virtual_sol_reserves += dev_buy;
+        pool_state.virtual_token_reserves -= token_amount;
     }
 
+    // static tip of 50000 lamports
+    ixs.push(transfer(&signer.pubkey(), &get_jito_tip_pubkey(), 50000));
+
     let rpc_client = RpcClient::new(env("RPC_URL"));
-    rpc_client
-        .send_and_confirm_transaction_with_spinner(
-            &Transaction::new_signed_with_payer(
-                &ixs,
-                Some(&signer.pubkey()),
-                &[signer, &mint_signer],
-                rpc_client.get_latest_blockhash().await?,
-            ),
-        )
-        .await?;
+    let latest_blockhash = rpc_client.get_latest_blockhash().await?;
+    let create_tx =
+        VersionedTransaction::from(Transaction::new_signed_with_payer(
+            &ixs,
+            Some(&signer.pubkey()),
+            &[signer, &mint_signer],
+            latest_blockhash,
+        ));
+
+    #[cfg(feature = "debug")]
+    {
+        debug!("create_tx: {:#?}", create_tx);
+        return Ok(());
+    }
+
+    #[cfg(not(feature = "debug"))]
+    send_bundle_no_wait(&[create_tx], &mut searcher_client).await?;
+
+    if let Some(wallet_manager) = wallet_manager {
+        let mut first_buy_bundle = vec![];
+        let mut second_buy_bundle = vec![];
+        for (i, wallet) in wallet_manager.wallets.iter().enumerate() {
+            let lamports_amount = jittered_lamports_amount(FUND_AMOUNT);
+            let token_amount = get_token_amount(
+                pool_state.virtual_sol_reserves,
+                pool_state.virtual_token_reserves,
+                None,
+                lamports_amount,
+            )?;
+            let buy_tx = VersionedTransaction::from(
+                Transaction::new_signed_with_payer(
+                    &_make_buy_ixs(
+                        wallet.pubkey(),
+                        mint,
+                        bonding_curve,
+                        associated_bonding_curve,
+                        token_amount,
+                        apply_fee(lamports_amount),
+                    )?,
+                    Some(&signer.pubkey()),
+                    &[signer, wallet],
+                    latest_blockhash,
+                ),
+            );
+            pool_state.virtual_sol_reserves += lamports_amount;
+            pool_state.virtual_token_reserves -= token_amount;
+            if i < 5 {
+                first_buy_bundle.push(buy_tx.clone());
+            } else if i < 10 {
+                second_buy_bundle.push(buy_tx.clone());
+            } else {
+                break;
+            }
+        }
+
+        #[cfg(feature = "debug")]
+        {
+            debug!("first_buy_bundle: {:#?}", first_buy_bundle);
+            debug!("second_buy_bundle: {:#?}", second_buy_bundle);
+            return Ok(());
+        }
+
+        #[cfg(not(feature = "debug"))]
+        {
+            send_bundle_no_wait(&first_buy_bundle, &mut searcher_client)
+                .await?;
+            send_bundle_no_wait(&second_buy_bundle, &mut searcher_client)
+                .await?;
+        }
+    }
 
     Ok(())
+}
+
+pub fn apply_fee(amount: u64) -> u64 {
+    amount * 101 / 100
+}
+
+pub fn jittered_lamports_amount(lamports: u64) -> u64 {
+    let mut rng = rand::thread_rng();
+    let jitter = rng.gen_range(0.8..0.95);
+    (lamports as f64 * jitter) as u64
 }
 
 pub fn get_bc_and_abc(mint: Pubkey) -> (Pubkey, Pubkey) {
@@ -370,11 +490,20 @@ mod launcher_tests {
         let signer =
             Keypair::read_from_file(env("FUND_KEYPAIR_PATH")).unwrap();
         launch(
-            "fucksnipers".to_string(),
-            "fksnip".to_string(),
-            "snipe this coin to get rugged, orc im waiting".to_string(),
+            &IPFSMetaForm {
+                name: "test".to_string(),
+                symbol: "test".to_string(),
+                description: "test".to_string(),
+                twitter: "".to_string(),
+                telegram: "".to_string(),
+                website: "".to_string(),
+                show_name: true,
+            },
+            None,
             &signer,
             Some(500000000),
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -389,10 +518,19 @@ mod launcher_tests {
         let signer =
             Keypair::read_from_file(env("FUND_KEYPAIR_PATH")).unwrap();
         launch(
-            "name".to_string(),
-            "symbol".to_string(),
-            "description".to_string(),
+            &IPFSMetaForm {
+                name: "test".to_string(),
+                symbol: "test".to_string(),
+                description: "test".to_string(),
+                twitter: "".to_string(),
+                telegram: "".to_string(),
+                website: "".to_string(),
+                show_name: true,
+            },
+            None,
             &signer,
+            None,
+            None,
             None,
         )
         .await

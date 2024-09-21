@@ -15,6 +15,34 @@ pub struct Args {}
 
 #[derive(Debug, Parser)]
 pub enum Command {
+    Launch {
+        #[arg(long)]
+        name: String,
+
+        #[arg(long)]
+        symbol: String,
+
+        #[arg(long)]
+        description: String,
+
+        #[arg(long)]
+        telegram: String,
+
+        #[arg(long)]
+        twitter: String,
+
+        #[arg(long)]
+        image_path: String,
+
+        #[arg(long)]
+        website: String,
+
+        #[arg(long)]
+        dev_buy: u64,
+
+        #[arg(long)]
+        snipe_buy: u64,
+    },
     Wallets {},
     LookForGeyser {},
     BundleStatus {
