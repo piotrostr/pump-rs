@@ -284,6 +284,13 @@ pub async fn launch(
     #[cfg(not(feature = "dry-run"))]
     send_bundle_no_wait(&[create_tx], &mut searcher_client).await?;
 
+    let latest_blockhash = loop {
+        let new_blockhash = rpc_client.get_latest_blockhash().await?;
+        if new_blockhash != latest_blockhash {
+            break new_blockhash;
+        }
+    };
+
     if let Some(wallet_manager) = wallet_manager {
         let mut first_buy_bundle = vec![];
         let mut second_buy_bundle = vec![];
@@ -295,18 +302,26 @@ pub async fn launch(
                 None,
                 lamports_amount,
             )?;
+            let mut ixs = _make_buy_ixs(
+                wallet.pubkey(),
+                mint,
+                bonding_curve,
+                associated_bonding_curve,
+                token_amount,
+                apply_fee(lamports_amount),
+            )?;
+            if i == 4 || i == 9 {
+                ixs.push(transfer(
+                    &wallet.pubkey(),
+                    &get_jito_tip_pubkey(),
+                    50000,
+                ));
+            }
             let buy_tx = VersionedTransaction::from(
                 Transaction::new_signed_with_payer(
-                    &_make_buy_ixs(
-                        wallet.pubkey(),
-                        mint,
-                        bonding_curve,
-                        associated_bonding_curve,
-                        token_amount,
-                        apply_fee(lamports_amount),
-                    )?,
-                    Some(&signer.pubkey()),
-                    &[signer, wallet],
+                    &ixs,
+                    Some(&wallet.pubkey()),
+                    &[wallet],
                     latest_blockhash,
                 ),
             );
@@ -330,10 +345,29 @@ pub async fn launch(
 
         #[cfg(not(feature = "dry-run"))]
         {
-            send_bundle_no_wait(&first_buy_bundle, &mut searcher_client)
-                .await?;
-            send_bundle_no_wait(&second_buy_bundle, &mut searcher_client)
-                .await?;
+            info!(
+                "{:?}",
+                send_bundle_no_wait(&first_buy_bundle, &mut searcher_client)
+                    .await?
+            );
+            // info!(
+            //     "{:?}",
+            //     send_bundle_no_wait(&second_buy_bundle, &mut searcher_client)
+            //         .await?
+            // );
+
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+            info!(
+                "{:?}",
+                send_bundle_no_wait(&first_buy_bundle, &mut searcher_client)
+                    .await?
+            );
+            // info!(
+            //     "{:?}",
+            //     send_bundle_no_wait(&second_buy_bundle, &mut searcher_client)
+            //         .await?
+            // );
         }
     }
 

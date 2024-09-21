@@ -15,6 +15,7 @@ pub struct Args {}
 
 #[derive(Debug, Parser)]
 pub enum Command {
+    BundleStatusListener {},
     Launch {
         #[arg(long)]
         name: String,

@@ -8,6 +8,7 @@ use pump_rs::constants::TOKEN_PROGRAM;
 use pump_rs::data::look_for_rpc_nodes;
 use pump_rs::jito::get_bundle_status;
 use pump_rs::jito::make_searcher_client;
+use pump_rs::jito::start_bundle_results_listener;
 use pump_rs::jito::subscribe_tips;
 use pump_rs::launcher;
 use pump_rs::launcher::IPFSMetaForm;
@@ -56,6 +57,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::BundleStatusListener {} => {
+            let searcher_client = make_searcher_client().await?;
+            start_bundle_results_listener(Arc::new(Mutex::new(
+                searcher_client,
+            )))
+            .await;
+            tokio::signal::ctrl_c().await?;
+        }
         Command::Launch {
             name,
             symbol,
