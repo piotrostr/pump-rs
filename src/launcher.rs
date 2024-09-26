@@ -37,9 +37,6 @@ pub const METADATA: &str = "GgrH3ApmK1SYJVZNEuUavbZQx4Yt8WoBz3tkRuLKwj45";
 pub const DEFAULT_SOL_INITIAL_RESERVES: u64 = 30_000_000_000;
 pub const DEFAULT_TOKEN_INITIAL_RESERVES: u64 = 1_073_000_000_000_000;
 
-// amount of SOL to fund the wallets with
-pub const FUND_AMOUNT: u64 = 10_000_000;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IPFSMetaForm {
     pub name: String,
@@ -210,7 +207,17 @@ pub async fn launch(
         return Err("snipe_buy must be set if wallet_manager is set".into());
     }
     if let Some(wallet_manager) = wallet_manager {
-        wallet_manager.fund(snipe_buy.unwrap()).await.unwrap();
+        let balances = wallet_manager.balances().await?;
+        if !balances
+            .iter()
+            .all(|(_, balance)| *balance >= snipe_buy.unwrap() + 50000)
+        {
+            // add 50k for the tip possibility on top of snipe buy amount
+            wallet_manager
+                .fund(snipe_buy.unwrap() + 50000)
+                .await
+                .unwrap();
+        }
     }
     let mut searcher_client = jito::make_searcher_client().await?;
     let mut ixs = vec![];
@@ -263,7 +270,7 @@ pub async fn launch(
         pool_state.virtual_token_reserves -= token_amount;
     }
 
-    // static tip of 50000 lamports
+    // static tip of 50000 lamports for the launch
     ixs.push(transfer(&signer.pubkey(), &get_jito_tip_pubkey(), 50000));
 
     let rpc_client = RpcClient::new(env("RPC_URL"));
@@ -295,7 +302,8 @@ pub async fn launch(
         let mut first_buy_bundle = vec![];
         let mut second_buy_bundle = vec![];
         for (i, wallet) in wallet_manager.wallets.iter().enumerate() {
-            let lamports_amount = jittered_lamports_amount(FUND_AMOUNT);
+            let lamports_amount =
+                jittered_lamports_amount(snipe_buy.unwrap());
             let token_amount = get_token_amount(
                 pool_state.virtual_sol_reserves,
                 pool_state.virtual_token_reserves,
@@ -307,14 +315,14 @@ pub async fn launch(
                 mint,
                 bonding_curve,
                 associated_bonding_curve,
-                token_amount,
+                token_amount * 90 / 100,
                 apply_fee(lamports_amount),
             )?;
             if i == 4 || i == 9 {
                 ixs.push(transfer(
                     &wallet.pubkey(),
                     &get_jito_tip_pubkey(),
-                    50000,
+                    25000,
                 ));
             }
             let buy_tx = VersionedTransaction::from(
@@ -345,29 +353,20 @@ pub async fn launch(
 
         #[cfg(not(feature = "dry-run"))]
         {
-            info!(
-                "{:?}",
-                send_bundle_no_wait(&first_buy_bundle, &mut searcher_client)
-                    .await?
-            );
-            // info!(
-            //     "{:?}",
-            //     send_bundle_no_wait(&second_buy_bundle, &mut searcher_client)
-            //         .await?
-            // );
-
-            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(2000))
+                .await;
 
             info!(
                 "{:?}",
                 send_bundle_no_wait(&first_buy_bundle, &mut searcher_client)
                     .await?
             );
-            // info!(
-            //     "{:?}",
-            //     send_bundle_no_wait(&second_buy_bundle, &mut searcher_client)
-            //         .await?
-            // );
+
+            info!(
+                "{:?}",
+                send_bundle_no_wait(&second_buy_bundle, &mut searcher_client)
+                    .await?
+            );
         }
     }
 

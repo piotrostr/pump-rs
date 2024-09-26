@@ -123,16 +123,19 @@ pub async fn handle_pump_buy_v2(
     let latest_blockhash = state.latest_blockhash.read().await;
     let dynamic_tip = state.dynamic_tip.read().await;
     let deadline = create_pump_token_event.slot + 1;
+    let buy_config = BuyConfig {
+        lamports: state.lamports,
+        jitter: 1,
+        num_tries: 1,
+        deadline: Some(deadline),
+        tip: *dynamic_tip,
+    };
     _handle_pump_buy(
+        buy_config,
         pump_buy_request,
-        state.lamports,
-        *dynamic_tip,
         &wallet,
         &mut searcher_client,
         &latest_blockhash,
-        Some(deadline),
-        1,
-        1,
     )
     .await?;
 
@@ -163,16 +166,19 @@ pub async fn handle_pump_buy(
     } else {
         None
     };
+    let buy_config = BuyConfig {
+        lamports: state.lamports,
+        jitter: 1,
+        num_tries: 1,
+        deadline,
+        tip: *dynamic_tip,
+    };
     _handle_pump_buy(
+        buy_config,
         pump_buy_request,
-        state.lamports,
-        *dynamic_tip,
         &wallet,
         &mut searcher_client,
         &latest_blockhash,
-        deadline,
-        69,
-        3,
     )
     .await?;
     Ok(HttpResponse::Ok().json(json!({
@@ -189,28 +195,32 @@ pub fn apply_fee(lamports: u64) -> u64 {
     lamports + fee
 }
 
+pub struct BuyConfig {
+    pub lamports: u64,
+    pub jitter: u64,
+    pub num_tries: usize,
+    pub deadline: Option<u64>,
+    pub tip: u64,
+}
+
 #[timed::timed(duration(printer = "info!"))]
 pub async fn _handle_pump_buy(
+    buy_config: BuyConfig,
     pump_buy_request: PumpBuyRequest,
-    lamports: u64,
-    tip: u64,
     wallet: &Keypair,
     searcher_client: &mut SearcherClient,
     latest_blockhash: &Hash,
-    deadline: Option<u64>,
-    jitter: u64,
-    num_tries: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Calculate token amount once, using the original lamports value
     let token_amount = pump::get_token_amount(
         pump_buy_request.virtual_sol_reserves,
         pump_buy_request.virtual_token_reserves,
         None,
-        lamports,
+        buy_config.lamports,
     )?;
 
-    let mut jitter = jitter;
-    for i in 0..num_tries {
+    let mut jitter = buy_config.jitter;
+    for i in 0..buy_config.num_tries {
         let mut ixs = vec![];
         ixs.append(&mut make_compute_budget_ixs(1000069, 72014));
         ixs.append(&mut pump::_make_buy_ixs(
@@ -221,9 +231,13 @@ pub async fn _handle_pump_buy(
             token_amount,
             // add random lamports in order to arrive at different sigs
             // (jito pubkey itself probably works too)
-            apply_fee(lamports) + jitter + i as u64,
+            apply_fee(buy_config.lamports) + jitter + i as u64,
         )?);
-        ixs.push(transfer(&wallet.pubkey(), &get_jito_tip_pubkey(), tip));
+        ixs.push(transfer(
+            &wallet.pubkey(),
+            &get_jito_tip_pubkey(),
+            buy_config.tip,
+        ));
 
         let swap_tx = Transaction::new_signed_with_payer(
             ixs.as_slice(),
@@ -232,7 +246,7 @@ pub async fn _handle_pump_buy(
             *latest_blockhash,
         );
 
-        let txs = if let Some(deadline) = deadline {
+        let txs = if let Some(deadline) = buy_config.deadline {
             vec![
                 make_deadline_tx(deadline, *latest_blockhash, wallet),
                 swap_tx,

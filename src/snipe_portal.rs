@@ -12,7 +12,9 @@ use tracing::info;
 
 use crate::jito::subscribe_tips;
 use crate::pump::{mint_to_pump_accounts, PumpBuyRequest};
-use crate::pump_service::{_handle_pump_buy, update_latest_blockhash};
+use crate::pump_service::{
+    _handle_pump_buy, update_latest_blockhash, BuyConfig,
+};
 use crate::slot::update_slot;
 use crate::util::{env, pubkey_to_string, string_to_pubkey};
 use crate::ws::connect_to_pump_portal_websocket;
@@ -147,15 +149,17 @@ pub async fn snipe_portal(lamports: u64) -> Result<(), Box<dyn Error>> {
                     //
                     // if there is a problem with the deadline, either need to resolve it
                     _handle_pump_buy(
+                        BuyConfig {
+                            lamports,
+                            tip: *dynamic_tip.read().await,
+                            deadline: None,
+                            jitter: 1,
+                            num_tries: 1,
+                        },
                         buy_req,
-                        lamports,
-                        *dynamic_tip.read().await,
                         &wallet.clone(),
                         &mut searcher_client,
                         &latest_blockhash,
-                        Some(current_slot + 40),
-                        0,
-                        1,
                     )
                     .await
                     .expect("handle pump buy");

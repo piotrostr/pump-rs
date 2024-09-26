@@ -10,7 +10,9 @@ use solana_sdk::signer::EncodableKey;
 use tokio::sync::{Mutex, RwLock};
 
 use crate::pump::PumpBuyRequest;
-use crate::pump_service::{_handle_pump_buy, update_latest_blockhash};
+use crate::pump_service::{
+    _handle_pump_buy, update_latest_blockhash, BuyConfig,
+};
 use crate::util::{env, pubkey_to_string, string_to_pubkey};
 use crate::ws::connect_to_pump_websocket;
 use log::{info, warn};
@@ -148,6 +150,13 @@ pub async fn snipe_pump(lamports: u64) -> Result<(), Box<dyn Error>> {
                                     let latest_blockhash =
                                         latest_blockhash.read().await;
                                     _handle_pump_buy(
+                                        BuyConfig {
+                                            lamports,
+                                            tip,
+                                            deadline: None,
+                                            jitter: 1,
+                                            num_tries: 1,
+                                        },
                                         PumpBuyRequest {
                                             mint: coin.mint,
                                             bonding_curve: coin.bonding_curve,
@@ -159,14 +168,9 @@ pub async fn snipe_pump(lamports: u64) -> Result<(), Box<dyn Error>> {
                                                 .virtual_sol_reserves,
                                             slot: None,
                                         },
-                                        lamports,
-                                        tip,
                                         &wallet.clone(),
                                         &mut searcher_client,
                                         &latest_blockhash,
-                                        None, // TODO add deadline here too
-                                        0,
-                                        1,
                                     )
                                     .await
                                     .expect("handle pump buy");

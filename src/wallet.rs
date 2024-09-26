@@ -4,6 +4,7 @@ use futures::future::join_all;
 use jito_searcher_client::send_bundle_no_wait;
 use log::info;
 use solana_client::nonblocking::rpc_client::RpcClient;
+use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::{EncodableKey, Signer};
 use solana_sdk::transaction::{Transaction, VersionedTransaction};
@@ -89,7 +90,9 @@ impl WalletManager {
         Ok(())
     }
 
-    pub async fn balances(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn balances(
+        &self,
+    ) -> Result<Vec<(Pubkey, u64)>, Box<dyn std::error::Error>> {
         let balances = self
             .wallets
             .iter()
@@ -108,7 +111,7 @@ impl WalletManager {
         let balances = join_all(balances).await;
 
         info!("Wallet balances: {:#?}", balances);
-        Ok(())
+        Ok(balances)
     }
 
     pub async fn fund(
@@ -154,6 +157,9 @@ impl WalletManager {
 
         let mut searcher_client = self.searcher_client.write().await;
         send_bundle_no_wait(&[tx], &mut searcher_client).await?;
+
+        self.wait_balance(&self.wallets.first().unwrap().pubkey(), amount)
+            .await?;
 
         info!(
             "Funded {} wallets with {} lamports each",
@@ -238,6 +244,30 @@ impl WalletManager {
             transactions.len()
         );
 
+        self.wait_balance(&self.wallets.first().unwrap().pubkey(), 0)
+            .await?;
+
         Ok(())
+    }
+
+    pub async fn wait_balance(
+        &self,
+        pubkey: &Pubkey,
+        amount: u64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Waiting for wallet balance to reach {}", amount);
+        loop {
+            let balance = self.rpc_client.get_balance(pubkey).await?;
+            if amount == 0 {
+                if balance == amount {
+                    info!("donezo!");
+                    break Ok(());
+                }
+            } else if balance >= amount {
+                info!("donezo!");
+                break Ok(());
+            }
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        }
     }
 }
