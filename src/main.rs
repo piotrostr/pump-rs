@@ -23,6 +23,8 @@ use pump_rs::snipe_portal;
 use pump_rs::util::init_logger;
 use pump_rs::util::parse_holding;
 use pump_rs::wallet::make_manager;
+use pump_rs::wallet::wait_balance;
+use pump_rs::wallet::wait_token_balance;
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_client::rpc_config::RpcTransactionConfig;
 use solana_client::rpc_request::TokenAccountsFilter;
@@ -525,15 +527,36 @@ async fn main() -> Result<(), Box<dyn Error>> {
             )?;
             let tip = 50_000;
 
+            let ata =
+                spl_associated_token_account::get_associated_token_address(
+                    &keypair.pubkey(),
+                    &mint,
+                );
+
+            let current_balance = rpc_client
+                .get_token_account_balance(&ata)
+                .await?
+                .amount
+                .parse::<u64>()?;
+
             pump::buy_pump_token(
                 &keypair,
                 latest_blockhash,
                 pump_accounts,
                 token_amount,
-                lamports,
+                lamports * 105 / 100, // slippage
                 tip,
             )
             .await?;
+
+            wait_token_balance(
+                &rpc_client,
+                &ata,
+                current_balance + token_amount,
+            )
+            .await?;
+
+            info!("OK!");
         }
     }
 

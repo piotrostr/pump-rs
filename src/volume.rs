@@ -12,7 +12,7 @@ use crate::{
         mint_to_pump_accounts, sell_pump_token,
     },
     util::env,
-    wallet::WalletManager,
+    wallet::{wait_balance, wait_token_balance, WalletManager},
 };
 
 /// buy_ratio 0-100, buys per 100 transactions
@@ -86,16 +86,14 @@ impl Volume {
         &mut self,
         wallet_manager: &mut WalletManager,
     ) -> Result<(), Box<dyn Error>> {
-        let latest_blockhash =
-            wallet_manager.rpc_client.get_latest_blockhash().await?;
+        let rpc_client = RpcClient::new(env("RPC_URL"));
+        let latest_blockhash = rpc_client.get_latest_blockhash().await?;
+        let pump_accounts = mint_to_pump_accounts(&self.config.mint);
         if let Some(is_buy) = self.queue.pop() {
             match is_buy {
                 true => {
                     // Buy operation
                     let fresh_wallet = wallet_manager.get_wallet();
-                    let rpc_client = RpcClient::new(env("RPC_URL"));
-                    let pump_accounts =
-                        mint_to_pump_accounts(&self.config.mint);
                     let bonding_curve = get_bonding_curve(
                         &rpc_client,
                         pump_accounts.bonding_curve,
@@ -116,6 +114,14 @@ impl Volume {
                         self.config.tip,
                     )
                     .await?;
+
+                    let ata = spl_associated_token_account::get_associated_token_address(
+                        &fresh_wallet.pubkey(),
+                        &pump_accounts.mint,
+                    );
+
+                    wait_token_balance(&rpc_client, &ata, token_amount)
+                        .await?;
 
                     self.wallets
                         .get_mut(&fresh_wallet.pubkey())
@@ -139,22 +145,32 @@ impl Volume {
                             .await?
                             .amount
                             .parse::<u64>()?;
-                        sell_pump_token(
-                            wallet_with_balance,
-                            wallet_manager
-                                .rpc_client
-                                .get_latest_blockhash()
-                                .await?,
-                            mint_to_pump_accounts(&self.config.mint),
-                            token_amount,
-                            self.config.tip,
-                        )
-                        .await?;
-                        self.wallets
-                            .get_mut(&wallet_with_balance.pubkey())
-                            .unwrap()
-                            .token_amounts
-                            .insert(self.config.mint, 0);
+                        if token_amount > 0 {
+                            sell_pump_token(
+                                wallet_with_balance,
+                                wallet_manager
+                                    .rpc_client
+                                    .get_latest_blockhash()
+                                    .await?,
+                                mint_to_pump_accounts(&self.config.mint),
+                                token_amount,
+                                self.config.tip,
+                            )
+                            .await?;
+
+                            let ata = spl_associated_token_account::get_associated_token_address(
+                                &wallet_with_balance.pubkey(),
+                                &pump_accounts.mint,
+                            );
+
+                            wait_token_balance(&rpc_client, &ata, 0).await?;
+
+                            self.wallets
+                                .get_mut(&wallet_with_balance.pubkey())
+                                .unwrap()
+                                .token_amounts
+                                .insert(self.config.mint, 0);
+                        }
                     }
                 }
             }

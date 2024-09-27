@@ -175,8 +175,12 @@ impl WalletManager {
         let mut searcher_client = self.searcher_client.write().await;
         send_bundle_no_wait(&[tx], &mut searcher_client).await?;
 
-        self.wait_balance(&self.wallets.first().unwrap().pubkey(), amount)
-            .await?;
+        wait_balance(
+            &self.rpc_client,
+            &self.wallets.first().unwrap().pubkey(),
+            amount,
+        )
+        .await?;
 
         info!(
             "Funded {} wallets with {} lamports each",
@@ -261,31 +265,14 @@ impl WalletManager {
             transactions.len()
         );
 
-        self.wait_balance(&self.wallets.first().unwrap().pubkey(), 0)
-            .await?;
+        wait_balance(
+            &self.rpc_client,
+            &self.wallets.first().unwrap().pubkey(),
+            0,
+        )
+        .await?;
 
         Ok(())
-    }
-
-    pub async fn wait_balance(
-        &self,
-        pubkey: &Pubkey,
-        amount: u64,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        info!("Waiting for wallet balance to reach {}", amount);
-        loop {
-            let balance = self.rpc_client.get_balance(pubkey).await?;
-            if amount == 0 {
-                if balance == amount {
-                    info!("donezo!");
-                    break Ok(());
-                }
-            } else if balance >= amount {
-                info!("donezo!");
-                break Ok(());
-            }
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-        }
     }
 
     pub fn get_wallet_by_pubkey(&self, pubkey: &Pubkey) -> Option<&Keypair> {
@@ -299,5 +286,53 @@ impl WalletManager {
         let res = self.wallets.get(self.index % self.wallets.len());
         self.index += 1;
         res.unwrap() // this can never throw
+    }
+}
+
+pub async fn wait_balance(
+    rpc_client: &RpcClient,
+    pubkey: &Pubkey,
+    amount: u64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Waiting for wallet balance to reach {}", amount);
+    loop {
+        let balance = rpc_client.get_balance(pubkey).await?;
+        if amount == 0 {
+            if balance == amount {
+                info!("donezo!");
+                break Ok(());
+            }
+        } else if balance >= amount {
+            info!("donezo!");
+            break Ok(());
+        }
+        info!("Balance: {} != {}", balance, amount);
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    }
+}
+
+pub async fn wait_token_balance(
+    rpc_client: &RpcClient,
+    pubkey: &Pubkey,
+    amount: u64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Waiting for token balance to reach {}", amount);
+    loop {
+        let balance = rpc_client
+            .get_token_account_balance(pubkey)
+            .await?
+            .amount
+            .parse::<u64>()?;
+        if amount == 0 {
+            if balance == amount {
+                info!("donezo!");
+                break Ok(());
+            }
+        } else if balance >= amount {
+            info!("donezo!");
+            break Ok(());
+        }
+        info!("Balance: {} != {}", balance, amount);
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 }
