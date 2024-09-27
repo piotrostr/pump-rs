@@ -129,6 +129,34 @@ pub fn subscribe_tips(dynamic_tip: Arc<RwLock<u64>>) -> JoinHandle<()> {
 }
 
 #[timed::timed(duration(printer = "info!"))]
+pub async fn send_jito_tx(
+    tx: Transaction,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let client = reqwest::Client::new();
+
+    let encoded_tx = match tx.encode(UiTransactionEncoding::Binary) {
+        EncodedTransaction::LegacyBinary(b) => b,
+        _ => return Err("Failed to encode transaction".into()),
+    };
+
+    let res = client
+        .post("https://mainnet.block-engine.jito.wtf/api/v1/transactions")
+        .header("content-type", "application/json")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "sendTransaction",
+            "params": [encoded_tx]
+        }))
+        .send()
+        .await
+        .expect("send tx");
+
+    info!("{:?}, {}", res, res.status());
+    Ok(())
+}
+
+#[timed::timed(duration(printer = "info!"))]
 pub async fn send_out_bundle_to_all_regions(
     bundle: &[Transaction],
 ) -> Result<Vec<JoinHandle<()>>, Box<dyn std::error::Error>> {

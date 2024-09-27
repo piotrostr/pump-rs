@@ -67,7 +67,6 @@ pub async fn run_seller() -> Result<(), Box<dyn Error>> {
         let rpc_client = rpc_client.clone();
         let latest_blockhash = latest_blockhash.clone();
         let wallet = wallet.clone();
-        let searcher_client = searcher_client.clone();
         let sold_cache = sold_cache.clone();
         tokio::spawn(async move {
             if let Ok(tx) = get_tx_with_retries(
@@ -100,14 +99,12 @@ pub async fn run_seller() -> Result<(), Box<dyn Error>> {
                     sold_cache.insert(sig.clone(), token_amount);
                     // let token_amount = token_amount * 3 / 5;
                     let pump_accounts = mint_to_pump_accounts(&mint);
-                    let mut searcher_client = searcher_client.lock().await;
                     let latest_blockhash = *latest_blockhash.read().await;
                     sell_pump_token(
                         &wallet,
                         latest_blockhash,
                         pump_accounts,
                         token_amount,
-                        &mut searcher_client,
                         tip,
                     )
                     .await

@@ -18,6 +18,7 @@ pub struct WalletManager {
     pub rpc_client: Arc<RpcClient>,
     pub searcher_client: Arc<RwLock<SearcherClient>>,
     pub wallets: Vec<Keypair>,
+    pub index: usize,
     pub wallet_directory: String,
 }
 
@@ -63,6 +64,7 @@ impl WalletManager {
             searcher_client,
             wallets,
             wallet_directory,
+            index: 0,
         }
     }
 
@@ -112,6 +114,21 @@ impl WalletManager {
 
         info!("Wallet balances: {:#?}", balances);
         Ok(balances)
+    }
+
+    pub async fn fund_idempotent(
+        &self,
+        amount: u64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if self
+            .balances()
+            .await?
+            .iter()
+            .all(|(_, balance)| *balance >= amount)
+        {
+            info!("All wallets already funded");
+        }
+        self.fund(amount).await
     }
 
     pub async fn fund(
@@ -269,5 +286,18 @@ impl WalletManager {
             }
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         }
+    }
+
+    pub fn get_wallet_by_pubkey(&self, pubkey: &Pubkey) -> Option<&Keypair> {
+        self.wallets.iter().find(|w| w.pubkey() == *pubkey)
+    }
+
+    pub fn get_wallet(&mut self) -> &Keypair {
+        if self.wallets.is_empty() {
+            panic!("No wallets available");
+        }
+        let res = self.wallets.get(self.index % self.wallets.len());
+        self.index += 1;
+        res.unwrap() // this can never throw
     }
 }

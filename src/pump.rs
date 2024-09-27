@@ -1,4 +1,5 @@
-use crate::jito::{send_out_bundle_to_all_regions, SearcherClient};
+use crate::jito::{send_jito_tx, SearcherClient};
+use crate::launcher::apply_fee;
 use futures_util::stream::StreamExt;
 use jito_protos::searcher::SubscribeBundleResultsRequest;
 use jito_searcher_client::{
@@ -18,7 +19,6 @@ use std::error::Error;
 
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
@@ -345,27 +345,15 @@ pub struct PumpBuyRequest {
 
 pub async fn buy_pump_token(
     wallet: &Keypair,
-    rpc_client: &RpcClient,
+    latest_blockhash: Hash,
     pump_accounts: PumpAccounts,
+    token_amount: u64,
     lamports: u64,
-    searcher_client: &mut Arc<Mutex<SearcherClient>>,
-    use_jito: bool,
+    tip: u64,
 ) -> Result<(), Box<dyn Error>> {
     let owner = wallet.pubkey();
 
-    let bonding_curve =
-        get_bonding_curve(rpc_client, pump_accounts.bonding_curve).await?;
-    let token_amount = get_token_amount(
-        bonding_curve.virtual_sol_reserves,
-        bonding_curve.virtual_token_reserves,
-        Some(bonding_curve.real_token_reserves),
-        lamports,
-    )?;
-
-    // apply slippage in a stupid manner
-    let token_amount = (token_amount as f64 * 0.97) as u64;
-
-    info!("buying {}", token_amount);
+    info!("{} buying {} {}", owner, token_amount, pump_accounts.mint);
 
     let mut ixs = _make_buy_ixs(
         owner,
@@ -373,42 +361,19 @@ pub async fn buy_pump_token(
         pump_accounts.bonding_curve,
         pump_accounts.associated_bonding_curve,
         token_amount,
-        lamports,
+        apply_fee(lamports),
     )?;
 
-    if use_jito {
-        let tip = 100_000;
-        let mut searcher_client = searcher_client.lock().await;
-        let latest_blockhash = rpc_client.get_latest_blockhash().await?;
-        ixs.push(transfer(&owner, &get_jito_tip_pubkey(), tip));
-        let tx =
-            VersionedTransaction::from(Transaction::new_signed_with_payer(
-                &ixs,
-                Some(&owner),
-                &[wallet],
-                latest_blockhash,
-            ));
-        send_bundle_no_wait(&[tx], &mut searcher_client).await?;
-    } else {
-        _send_tx_standard(ixs, wallet, rpc_client, owner).await?;
-    }
+    ixs.push(transfer(&owner, &get_jito_tip_pubkey(), tip));
 
-    // send the tx with spinner
-    // let res = rpc_client
-    //     .send_and_confirm_transaction_with_spinner_and_config(
-    //         &transaction,
-    //         CommitmentConfig::processed(),
-    //         RpcSendTransactionConfig {
-    //             encoding: Some(UiTransactionEncoding::Base64),
-    //             skip_preflight: true,
-    //             max_retries: None,
-    //             preflight_commitment: None,
-    //             min_context_slot: None,
-    //         },
-    //     )
-    //     .await;
-    //
-    // send the transaction without spinner
+    let tx = Transaction::new_signed_with_payer(
+        &ixs,
+        Some(&owner),
+        &[wallet],
+        latest_blockhash,
+    );
+
+    send_jito_tx(tx).await?;
 
     Ok(())
 }
@@ -491,7 +456,6 @@ pub async fn sell_pump_token(
     latest_blockhash: Hash,
     pump_accounts: PumpAccounts,
     token_amount: u64,
-    _searcher_client: &mut SearcherClient,
     tip: u64,
 ) -> Result<(), Box<dyn Error>> {
     let owner = wallet.pubkey();
@@ -514,9 +478,8 @@ pub async fn sell_pump_token(
         &[wallet],
         latest_blockhash,
     );
-    // let _versioned_tx = VersionedTransaction::from(tx.clone());
 
-    send_out_bundle_to_all_regions(&[tx]).await?;
+    send_jito_tx(tx).await?;
 
     Ok(())
 }
@@ -803,7 +766,7 @@ pub async fn send_pump_bump(
     wallet: &Keypair,
     rpc_client: &RpcClient,
     mint: &Pubkey,
-    searcher_client: &mut Arc<Mutex<SearcherClient>>,
+    searcher_client: &mut Arc<RwLock<SearcherClient>>,
     wait_for_confirmation: bool,
 ) -> Result<(), Box<dyn Error>> {
     let lamports = 22_800_000;
@@ -823,27 +786,28 @@ pub async fn send_pump_bump(
         &owner,
         &pump_accounts.mint,
     );
+    let latest_blockhash = rpc_client.get_latest_blockhash().await?;
+    // 0.00005 sol
+    let tip = 50_000;
 
     if rpc_client.get_account(&ata).await.is_err() {
         warn!("ata does not exist, creating it through buy and sell");
         buy_pump_token(
             wallet,
-            rpc_client,
+            latest_blockhash,
             pump_accounts,
+            token_amount,
             lamports,
-            searcher_client,
-            true,
+            tip,
         )
         .await?;
 
-        let mut searcher_client = searcher_client.lock().await;
         sell_pump_token(
             wallet,
-            rpc_client.get_latest_blockhash().await?,
+            latest_blockhash,
             pump_accounts,
             token_amount,
-            &mut searcher_client,
-            50_000,
+            tip,
         )
         .await?;
         return Ok(());
@@ -875,7 +839,7 @@ pub async fn send_pump_bump(
         rpc_client.get_latest_blockhash().await?,
     ));
 
-    let mut searcher_client = searcher_client.lock().await;
+    let mut searcher_client = searcher_client.write().await;
 
     if wait_for_confirmation {
         let mut bundle_results_subscription = searcher_client
@@ -920,7 +884,7 @@ mod tests {
         let auth = Arc::new(
             Keypair::read_from_file(env("AUTH_KEYPAIR_PATH")).unwrap(),
         );
-        let mut searcher_client = Arc::new(Mutex::new(
+        let mut searcher_client = Arc::new(RwLock::new(
             get_searcher_client(env("BLOCK_ENGINE_URL").as_str(), &auth)
                 .await
                 .expect("makes searcher client"),
@@ -1020,21 +984,17 @@ mod tests {
             .expect("read wallet");
         let rpc_client =
             RpcClient::new("https://api.mainnet-beta.solana.com".to_string());
-        let auth = Arc::new(
-            Keypair::read_from_file(env("AUTH_KEYPAIR_PATH")).unwrap(),
-        );
-        let mut searcher_client = Arc::new(Mutex::new(
-            get_searcher_client(env("BLOCK_ENGINE_URL").as_str(), &auth)
-                .await
-                .expect("makes searcher client"),
-        ));
+        let tip = 50_000;
         buy_pump_token(
             &wallet,
-            &rpc_client,
+            rpc_client
+                .get_latest_blockhash()
+                .await
+                .expect("get blockhash"),
             pump_accounts,
+            100_000,
             lamports,
-            &mut searcher_client,
-            true,
+            tip,
         )
         .await
         .expect("buy pump token");

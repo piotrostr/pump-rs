@@ -12,6 +12,8 @@ use pump_rs::jito::start_bundle_results_listener;
 use pump_rs::jito::subscribe_tips;
 use pump_rs::launcher;
 use pump_rs::launcher::IPFSMetaForm;
+use pump_rs::pump::get_bonding_curve;
+use pump_rs::pump::get_token_amount;
 use pump_rs::seller;
 use pump_rs::seller::get_tx_with_retries;
 use pump_rs::slot::make_deadline_tx;
@@ -427,7 +429,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let auth = Arc::new(
                 Keypair::read_from_file(env("AUTH_KEYPAIR_PATH")).unwrap(),
             );
-            let mut searcher_client = Arc::new(Mutex::new(
+            let mut searcher_client = Arc::new(RwLock::new(
                 get_searcher_client(env("BLOCK_ENGINE_URL").as_str(), &auth)
                     .await
                     .expect("makes searcher client"),
@@ -495,7 +497,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         rpc_client.get_latest_blockhash().await?,
                         pump_accounts,
                         holding.amount,
-                        &mut searcher_client,
                         50_000, // tip
                     )
                     .await?;
@@ -503,8 +504,36 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        Command::BuyPumpToken { mint: _ } => {
-            return Err("Unimplemented".into());
+        Command::Buy { mint, lamports } => {
+            let keypair = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
+                .expect("read wallet");
+            let rpc_client =
+                Arc::new(RpcClient::new(env("RPC_URL").to_string()));
+            let mint = Pubkey::from_str(&mint)?;
+            let pump_accounts = pump::mint_to_pump_accounts(&mint);
+
+            let latest_blockhash = rpc_client.get_latest_blockhash().await?;
+
+            let bonding_curve =
+                get_bonding_curve(&rpc_client, pump_accounts.bonding_curve)
+                    .await?;
+            let token_amount = get_token_amount(
+                bonding_curve.virtual_sol_reserves,
+                bonding_curve.virtual_token_reserves,
+                None,
+                lamports,
+            )?;
+            let tip = 50_000;
+
+            pump::buy_pump_token(
+                &keypair,
+                latest_blockhash,
+                pump_accounts,
+                token_amount,
+                lamports,
+                tip,
+            )
+            .await?;
         }
     }
 

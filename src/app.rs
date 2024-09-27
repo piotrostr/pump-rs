@@ -103,8 +103,11 @@ pub enum Command {
         #[arg(long)]
         wallet_path: String,
     },
-    BuyPumpToken {
+    Buy {
         #[arg(long)]
         mint: String,
+
+        #[arg(long)]
+        lamports: u64,
     },
 }

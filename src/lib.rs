@@ -14,5 +14,6 @@ pub mod slot;
 pub mod snipe;
 pub mod snipe_portal;
 pub mod util;
+pub mod volume;
 pub mod wallet;
 pub mod ws;
