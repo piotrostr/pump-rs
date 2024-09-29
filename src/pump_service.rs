@@ -1,4 +1,4 @@
-use crate::jito::{send_jito_tx, subscribe_tips, SearcherClient};
+use crate::jito::{/*send_jito_tx,*/ subscribe_tips, SearcherClient};
 use crate::pump::{self, PumpBuyRequest};
 use crate::slot::make_deadline_ix;
 use crate::util::{get_jito_tip_pubkey, make_compute_budget_ixs};
@@ -208,7 +208,7 @@ pub async fn _handle_pump_buy(
     buy_config: BuyConfig,
     pump_buy_request: PumpBuyRequest,
     wallet: &Keypair,
-    _searcher_client: &mut SearcherClient,
+    searcher_client: &mut SearcherClient,
     latest_blockhash: &Hash,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Calculate token amount once, using the original lamports value
@@ -234,11 +234,11 @@ pub async fn _handle_pump_buy(
         )?);
         info!("buying {} tokens with {} lamports", token_amount, lamports);
 
-        // ixs.push(transfer(
-        //     &wallet.pubkey(),
-        //     &get_jito_tip_pubkey(),
-        //     buy_config.tip,
-        // ));
+        ixs.push(transfer(
+            &wallet.pubkey(),
+            &get_jito_tip_pubkey(),
+            std::cmp::max(buy_config.tip, 50_000),
+        ));
 
         if let Some(deadline) = buy_config.deadline {
             ixs.push(make_deadline_ix(deadline));
@@ -251,30 +251,23 @@ pub async fn _handle_pump_buy(
             *latest_blockhash,
         );
 
-        tokio::spawn(async move {
-            send_jito_tx(swap_tx).await.expect("send jito tx");
-        });
+        // tokio::spawn(async move {
+        //     send_jito_tx(swap_tx).await.expect("send jito tx");
+        // });
 
-        // commenting out below for now, checking out transaction endpoint
-        // let versioned_txs: Vec<VersionedTransaction> = txs
-        //     .iter()
-        //     .map(|tx| VersionedTransaction::from(tx.clone()))
-        //     .collect();
+        let res = send_bundle_no_wait(
+            &[VersionedTransaction::from(swap_tx.clone())],
+            searcher_client,
+        )
+        .await
+        .expect("send bundle no wait");
 
-        // tokio::time::sleep(Duration::from_millis(jitter)).await;
-        // let res = send_bundle_no_wait(&versioned_txs, searcher_client)
-        //     .await
-        //     .expect("send bundle no wait");
-
-        // info!(
-        //     "Bundle {} sent through gRPC: {} {:#?}",
-        //     i + 1,
-        //     res.into_inner().uuid,
-        //     versioned_txs
-        //         .iter()
-        //         .map(|tx| tx.signatures[0])
-        //         .collect::<Vec<_>>()
-        // );
+        info!(
+            "Bundle {} sent through gRPC: {} {:#?}",
+            i + 1,
+            res.into_inner().uuid,
+            swap_tx.signatures[0]
+        );
 
         jitter += 1;
     }

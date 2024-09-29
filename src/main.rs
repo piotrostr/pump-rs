@@ -23,7 +23,6 @@ use pump_rs::snipe_portal;
 use pump_rs::util::init_logger;
 use pump_rs::util::parse_holding;
 use pump_rs::wallet::make_manager;
-use pump_rs::wallet::wait_balance;
 use pump_rs::wallet::wait_token_balance;
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_client::rpc_config::RpcTransactionConfig;

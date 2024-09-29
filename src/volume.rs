@@ -12,7 +12,7 @@ use crate::{
         mint_to_pump_accounts, sell_pump_token,
     },
     util::env,
-    wallet::{wait_balance, wait_token_balance, WalletManager},
+    wallet::{wait_token_balance, WalletManager},
 };
 
 /// buy_ratio 0-100, buys per 100 transactions
