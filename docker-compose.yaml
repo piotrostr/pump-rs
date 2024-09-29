@@ -29,3 +29,16 @@ services:
       - ./FuckU.json:/FuckU.json
       - ./auth.json:/auth.json
     command: ["./pump-rs", "seller"]
+
+  cli:
+    image: piotrostr/pump-rs
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    volumes:
+      - .env:/.env
+      - ./FuckU.json:/FuckU.json
+      - ./auth.json:/auth.json
+    command: ["./pump-rs"]
