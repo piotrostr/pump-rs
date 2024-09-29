@@ -232,10 +232,7 @@ pub async fn _handle_pump_buy(
             token_amount,
             lamports,
         )?);
-        info!(
-            "buying {} tokens with {} lamports",
-            token_amount, buy_config.lamports
-        );
+        info!("buying {} tokens with {} lamports", token_amount, lamports);
 
         // ixs.push(transfer(
         //     &wallet.pubkey(),
