@@ -223,16 +223,19 @@ pub async fn _handle_pump_buy(
     for i in 0..buy_config.num_tries {
         let mut ixs = vec![];
         ixs.append(&mut make_compute_budget_ixs(1000069, 69000));
+        let lamports = apply_fee(buy_config.lamports) + jitter + i as u64 * 2;
         ixs.append(&mut pump::_make_buy_ixs(
             wallet.pubkey(),
             pump_buy_request.mint,
             pump_buy_request.bonding_curve,
             pump_buy_request.associated_bonding_curve,
             token_amount,
-            // add random lamports in order to arrive at different sigs
-            // (jito pubkey itself probably works too)
-            apply_fee(buy_config.lamports) + jitter + i as u64 * 2,
+            lamports,
         )?);
+        info!(
+            "buying {} tokens with {} lamports",
+            token_amount, buy_config.lamports
+        );
 
         // ixs.push(transfer(
         //     &wallet.pubkey(),
