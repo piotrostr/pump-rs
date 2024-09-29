@@ -13,6 +13,7 @@ pub mod seller;
 pub mod slot;
 pub mod snipe;
 pub mod snipe_portal;
+pub mod tpu;
 pub mod util;
 pub mod volume;
 pub mod wallet;
