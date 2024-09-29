@@ -1,6 +1,6 @@
 use crate::jito::{send_jito_tx, subscribe_tips, SearcherClient};
 use crate::pump::{self, PumpBuyRequest};
-use crate::slot::make_deadline_tx;
+use crate::slot::make_deadline_ix;
 use crate::util::{get_jito_tip_pubkey, make_compute_budget_ixs};
 use actix_web::web::Data;
 use actix_web::{get, post, web::Json, App, Error, HttpResponse, HttpServer};
@@ -208,7 +208,7 @@ pub async fn _handle_pump_buy(
     buy_config: BuyConfig,
     pump_buy_request: PumpBuyRequest,
     wallet: &Keypair,
-    searcher_client: &mut SearcherClient,
+    _searcher_client: &mut SearcherClient,
     latest_blockhash: &Hash,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Calculate token amount once, using the original lamports value
@@ -233,11 +233,16 @@ pub async fn _handle_pump_buy(
             // (jito pubkey itself probably works too)
             apply_fee(buy_config.lamports) + jitter + i as u64,
         )?);
+
         ixs.push(transfer(
             &wallet.pubkey(),
             &get_jito_tip_pubkey(),
             buy_config.tip,
         ));
+
+        if let Some(deadline) = buy_config.deadline {
+            ixs.push(make_deadline_ix(deadline));
+        }
 
         let swap_tx = Transaction::new_signed_with_payer(
             ixs.as_slice(),
@@ -246,62 +251,33 @@ pub async fn _handle_pump_buy(
             *latest_blockhash,
         );
 
-        let txs = if let Some(deadline) = buy_config.deadline {
-            vec![
-                make_deadline_tx(deadline, *latest_blockhash, wallet),
-                swap_tx.clone(),
-            ]
-        } else {
-            vec![swap_tx.clone()]
-        };
-
         tokio::spawn(async move {
             send_jito_tx(swap_tx).await.expect("send jito tx");
         });
 
-        let versioned_txs: Vec<VersionedTransaction> = txs
-            .iter()
-            .map(|tx| VersionedTransaction::from(tx.clone()))
-            .collect();
+        // commenting out below for now, checking out transaction endpoint
+        // let versioned_txs: Vec<VersionedTransaction> = txs
+        //     .iter()
+        //     .map(|tx| VersionedTransaction::from(tx.clone()))
+        //     .collect();
 
-        tokio::time::sleep(Duration::from_millis(jitter)).await;
-        let res = send_bundle_no_wait(&versioned_txs, searcher_client)
-            .await
-            .expect("send bundle no wait");
+        // tokio::time::sleep(Duration::from_millis(jitter)).await;
+        // let res = send_bundle_no_wait(&versioned_txs, searcher_client)
+        //     .await
+        //     .expect("send bundle no wait");
 
-        info!(
-            "Bundle {} sent through gRPC: {} {:#?}",
-            i + 1,
-            res.into_inner().uuid,
-            versioned_txs
-                .iter()
-                .map(|tx| tx.signatures[0])
-                .collect::<Vec<_>>()
-        );
+        // info!(
+        //     "Bundle {} sent through gRPC: {} {:#?}",
+        //     i + 1,
+        //     res.into_inner().uuid,
+        //     versioned_txs
+        //         .iter()
+        //         .map(|tx| tx.signatures[0])
+        //         .collect::<Vec<_>>()
+        // );
 
         jitter += 1;
     }
-
-    // let start = std::time::Instant::now();
-    // for (i, bundle) in bundles.iter().enumerate() {
-    //     let txs: Vec<Transaction> = bundle
-    //         .iter()
-    //         .map(|vtx| {
-    //             Transaction::try_from(vtx.clone())
-    //                 .expect("Failed to convert to Transaction")
-    //         })
-    //         .collect();
-    //     send_out_bundle_to_all_regions(&txs).await?;
-
-    //     info!("Bundle {} sent out through HTTP", i + 1);
-
-    //     // Add jitter between 0 and 200ms
-    //     let jitter = rng.gen_range(0..200);
-    //     tokio::time::sleep(Duration::from_millis(jitter)).await;
-    // }
-
-    // let elapsed = start.elapsed();
-    // info!("All bundles sent out through HTTP in {:?}", elapsed);
 
     Ok(())
 }

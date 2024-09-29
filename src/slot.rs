@@ -43,13 +43,17 @@ pub fn make_deadline_tx(
     keypair: &Keypair,
 ) -> Transaction {
     Transaction::new_signed_with_payer(
-        &[Instruction::new_with_bytes(
-            Pubkey::from_str(SLOT_CHECKER_MAINNET).expect("pubkey"),
-            &deadline.to_le_bytes(),
-            vec![],
-        )],
+        &[make_deadline_ix(deadline)],
         Some(&keypair.pubkey()),
         &[keypair],
         latest_blockhash,
+    )
+}
+
+pub fn make_deadline_ix(deadline: u64) -> Instruction {
+    Instruction::new_with_bytes(
+        Pubkey::from_str(SLOT_CHECKER_MAINNET).expect("pubkey"),
+        &deadline.to_le_bytes(),
+        vec![],
     )
 }
