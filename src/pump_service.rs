@@ -219,8 +219,6 @@ pub async fn _handle_pump_buy(
         buy_config.lamports,
     )?;
 
-    let token_amount = token_amount * 95 / 100; // slippage 5%
-
     let mut jitter = buy_config.jitter;
     for i in 0..buy_config.num_tries {
         let mut ixs = vec![];
@@ -233,7 +231,7 @@ pub async fn _handle_pump_buy(
             token_amount,
             // add random lamports in order to arrive at different sigs
             // (jito pubkey itself probably works too)
-            apply_fee(buy_config.lamports) + jitter + i as u64,
+            apply_fee(buy_config.lamports) + jitter + i as u64 * 105 / 100,
         )?);
 
         // ixs.push(transfer(
