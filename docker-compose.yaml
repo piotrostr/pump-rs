@@ -10,9 +10,9 @@ services:
       - 6969:6969
     volumes:
       - .env:/.env
-      - ./FAST.json:/FAST.json
+      - ./FuckU.json:/FuckU.json
       - ./auth.json:/auth.json
-    command: ["./pump-rs", "pump-service", "--lamports", "100000000"]
+    command: ["./pump-rs", "pump-service", "--lamports", "10000000"]
     environment:
       - RUST_LOG=info
     network_mode: host
@@ -26,6 +26,6 @@ services:
     restart: always
     volumes:
       - .env:/.env
-      - ./FAST.json:/FAST.json
+      - ./FuckU.json:/FuckU.json
       - ./auth.json:/auth.json
     command: ["./pump-rs", "seller"]
