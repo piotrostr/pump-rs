@@ -1,6 +1,6 @@
 use crate::jito::{/*send_jito_tx,*/ subscribe_tips, SearcherClient};
 use crate::pump::{self, PumpBuyRequest};
-use crate::slot::make_deadline_ix;
+use crate::slot::{make_deadline_ix, update_slot};
 use crate::util::{get_jito_tip_pubkey, make_compute_budget_ixs};
 use actix_web::web::Data;
 use actix_web::{get, post, web::Json, App, Error, HttpResponse, HttpServer};
@@ -52,6 +52,7 @@ pub struct AppState {
     pub latest_blockhash: Arc<RwLock<Hash>>,
     pub dynamic_tip: Arc<RwLock<u64>>,
     pub lamports: u64,
+    pub slot: Arc<RwLock<u64>>,
 }
 
 #[get("/blockhash")]
@@ -118,6 +119,11 @@ pub async fn handle_pump_buy_v2(
             "status": "OK, but dev bought amount too high"
         })));
     }
+    info!(
+        "current slot: {}, token created slot: {}",
+        *state.slot.read().await,
+        create_pump_token_event.slot
+    );
     let wallet = state.wallet.lock().await;
     let mut searcher_client = state.searcher_client.lock().await;
     let latest_blockhash = state.latest_blockhash.read().await;
@@ -307,12 +313,16 @@ pub async fn run_pump_service(lamports: u64) -> std::io::Result<()> {
     let dynamic_tip = Arc::new(RwLock::new(0));
     subscribe_tips(dynamic_tip.clone());
 
+    let slot = Arc::new(RwLock::new(0));
+    update_slot(slot.clone());
+
     let app_state = Data::new(AppState {
         wallet,
         searcher_client,
         latest_blockhash: Arc::new(RwLock::new(Hash::default())),
         dynamic_tip,
         lamports,
+        slot,
     });
 
     // poll for latest blockhash to trim 200ms
