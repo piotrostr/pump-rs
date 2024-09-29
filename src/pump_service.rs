@@ -231,7 +231,7 @@ pub async fn _handle_pump_buy(
             token_amount,
             // add random lamports in order to arrive at different sigs
             // (jito pubkey itself probably works too)
-            apply_fee(buy_config.lamports) + jitter + i as u64 * 105 / 100,
+            apply_fee(buy_config.lamports) + jitter + i as u64 * 2,
         )?);
 
         // ixs.push(transfer(
