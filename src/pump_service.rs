@@ -234,11 +234,11 @@ pub async fn _handle_pump_buy(
             apply_fee(buy_config.lamports) + jitter + i as u64,
         )?);
 
-        ixs.push(transfer(
-            &wallet.pubkey(),
-            &get_jito_tip_pubkey(),
-            buy_config.tip,
-        ));
+        // ixs.push(transfer(
+        //     &wallet.pubkey(),
+        //     &get_jito_tip_pubkey(),
+        //     buy_config.tip,
+        // ));
 
         if let Some(deadline) = buy_config.deadline {
             ixs.push(make_deadline_ix(deadline));
