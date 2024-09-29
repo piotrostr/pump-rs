@@ -152,7 +152,10 @@ pub async fn send_jito_tx(
         .await
         .expect("send tx");
 
-    info!("{:?}, {}", res, res.status());
+    let status = res.status();
+    let out = res.json::<serde_json::Value>().await?;
+
+    info!("{}: {}", status, out);
     Ok(())
 }
 

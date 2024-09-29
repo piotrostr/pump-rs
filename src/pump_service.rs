@@ -1,4 +1,4 @@
-use crate::jito::{subscribe_tips, SearcherClient};
+use crate::jito::{send_jito_tx, subscribe_tips, SearcherClient};
 use crate::pump::{self, PumpBuyRequest};
 use crate::slot::make_deadline_tx;
 use crate::util::{get_jito_tip_pubkey, make_compute_budget_ixs};
@@ -249,11 +249,15 @@ pub async fn _handle_pump_buy(
         let txs = if let Some(deadline) = buy_config.deadline {
             vec![
                 make_deadline_tx(deadline, *latest_blockhash, wallet),
-                swap_tx,
+                swap_tx.clone(),
             ]
         } else {
-            vec![swap_tx]
+            vec![swap_tx.clone()]
         };
+
+        tokio::spawn(async move {
+            send_jito_tx(swap_tx).await.expect("send jito tx");
+        });
 
         let versioned_txs: Vec<VersionedTransaction> = txs
             .iter()
