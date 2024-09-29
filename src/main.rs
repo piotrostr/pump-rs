@@ -505,57 +505,105 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        Command::Buy { mint, lamports } => {
+        Command::SwapMode { lamports, sell } => {
             let keypair = Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
                 .expect("read wallet");
             let rpc_client =
                 Arc::new(RpcClient::new(env("RPC_URL").to_string()));
-            let mint = Pubkey::from_str(&mint)?;
-            let pump_accounts = pump::mint_to_pump_accounts(&mint);
-
-            let latest_blockhash = rpc_client.get_latest_blockhash().await?;
-
-            let bonding_curve =
-                get_bonding_curve(&rpc_client, pump_accounts.bonding_curve)
-                    .await?;
-            let token_amount = get_token_amount(
-                bonding_curve.virtual_sol_reserves,
-                bonding_curve.virtual_token_reserves,
-                None,
-                lamports,
-            )?;
             let tip = 50_000;
 
-            let ata =
-                spl_associated_token_account::get_associated_token_address(
-                    &keypair.pubkey(),
-                    &mint,
-                );
+            loop {
+                println!("Enter a mint address (or 'q' to quit):");
+                let mut input = String::new();
+                std::io::stdin()
+                    .read_line(&mut input)
+                    .expect("Failed to read line");
+                let input = input.trim();
 
-            let current_balance = rpc_client
-                .get_token_account_balance(&ata)
-                .await?
-                .amount
-                .parse::<u64>()?;
+                if input.to_lowercase() == "q" {
+                    break;
+                }
 
-            pump::buy_pump_token(
-                &keypair,
-                latest_blockhash,
-                pump_accounts,
-                token_amount,
-                lamports * 105 / 100, // slippage
-                tip,
-            )
-            .await?;
+                match Pubkey::from_str(input) {
+                    Ok(mint) => {
+                        let pump_accounts =
+                            pump::mint_to_pump_accounts(&mint);
+                        let latest_blockhash =
+                            rpc_client.get_latest_blockhash().await?;
 
-            wait_token_balance(
-                &rpc_client,
-                &ata,
-                current_balance + token_amount,
-            )
-            .await?;
+                        let bonding_curve = get_bonding_curve(
+                            &rpc_client,
+                            pump_accounts.bonding_curve,
+                        )
+                        .await?;
 
-            info!("OK!");
+                        if sell {
+                            let ata = spl_associated_token_account::get_associated_token_address(
+                                &keypair.pubkey(),
+                                &mint,
+                            );
+                            let token_amount = rpc_client
+                                .get_token_account_balance(&ata)
+                                .await?
+                                .amount
+                                .parse::<u64>()
+                                .unwrap();
+                            match pump::sell_pump_token(
+                                &keypair,
+                                latest_blockhash,
+                                pump_accounts,
+                                token_amount,
+                                tip,
+                            )
+                            .await
+                            {
+                                Ok(_) => {
+                                    info!(
+                                        "Sell successful for mint: {}",
+                                        mint
+                                    )
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        "Sell failed for mint {}: {}",
+                                        mint, e
+                                    )
+                                }
+                            }
+                        } else {
+                            let token_amount = get_token_amount(
+                                bonding_curve.virtual_sol_reserves,
+                                bonding_curve.virtual_token_reserves,
+                                None,
+                                lamports,
+                            )?;
+                            match pump::buy_pump_token(
+                                &keypair,
+                                latest_blockhash,
+                                pump_accounts,
+                                token_amount,
+                                lamports * 105 / 100, // slippage
+                                tip,
+                            )
+                            .await
+                            {
+                                Ok(_) => {
+                                    info!("Buy successful for mint: {}", mint)
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        "Buy failed for mint {}: {}",
+                                        mint, e
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        println!("Invalid mint address. Please try again.")
+                    }
+                }
+            }
         }
     }
 

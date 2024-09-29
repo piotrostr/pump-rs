@@ -466,7 +466,7 @@ pub async fn sell_pump_token(
     );
 
     let mut ixs = vec![];
-    let mut compute_budget_ixs = make_compute_budget_ixs(25_000, 272_500);
+    let mut compute_budget_ixs = make_compute_budget_ixs(69_000, 69_000);
     let sell_ix = make_pump_sell_ix(owner, pump_accounts, token_amount, ata)?;
     ixs.append(&mut compute_budget_ixs);
     ixs.push(sell_ix);

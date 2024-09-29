@@ -103,11 +103,11 @@ pub enum Command {
         #[arg(long)]
         wallet_path: String,
     },
-    Buy {
-        #[arg(long)]
-        mint: String,
-
+    SwapMode {
         #[arg(long)]
         lamports: u64,
+
+        #[arg(long, default_value = "false")]
+        sell: bool,
     },
 }
