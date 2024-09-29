@@ -223,7 +223,7 @@ pub async fn _handle_pump_buy(
     for i in 0..buy_config.num_tries {
         let mut ixs = vec![];
         ixs.append(&mut make_compute_budget_ixs(1000069, 69000));
-        let lamports = apply_fee(buy_config.lamports) + jitter + i as u64 * 2;
+        let lamports = apply_fee(buy_config.lamports) * 2 + i as u64 + jitter;
         ixs.append(&mut pump::_make_buy_ixs(
             wallet.pubkey(),
             pump_buy_request.mint,
