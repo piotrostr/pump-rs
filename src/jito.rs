@@ -139,8 +139,10 @@ pub async fn send_jito_tx(
         _ => return Err("Failed to encode transaction".into()),
     };
 
+    // amsterdam can be ny, tokio, frankfurt, slc
+    // pick the closest region
     let res = client
-        .post("https://mainnet.block-engine.jito.wtf/api/v1/transactions")
+        .post("https://amsterdam.mainnet.block-engine.jito.wtf/api/v1/transactions")
         .header("content-type", "application/json")
         .json(&json!({
             "jsonrpc": "2.0",
