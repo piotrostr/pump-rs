@@ -219,6 +219,8 @@ pub async fn _handle_pump_buy(
         buy_config.lamports,
     )?;
 
+    let token_amount = token_amount * 95 / 100; // slippage 5%
+
     let mut jitter = buy_config.jitter;
     for i in 0..buy_config.num_tries {
         let mut ixs = vec![];
