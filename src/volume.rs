@@ -49,7 +49,7 @@ pub async fn init(
     queue.shuffle(&mut rand::thread_rng());
     let mut wallets = HashMap::new();
     wallet_manager.fund_idempotent(config.lamports).await?;
-    let lamport_balances = wallet_manager.balances().await?;
+    let lamport_balances = wallet_manager._balances().await?;
     for (pubkey, balance) in lamport_balances.iter() {
         wallets.entry(*pubkey).or_insert_with(|| Balances {
             lamports: *balance,

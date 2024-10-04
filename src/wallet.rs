@@ -1,15 +1,19 @@
+use std::str::FromStr;
 use std::sync::Arc;
 
 use futures::future::join_all;
 use jito_searcher_client::send_bundle_no_wait;
 use log::info;
+use solana_account_decoder::UiAccountData;
 use solana_client::nonblocking::rpc_client::RpcClient;
+use solana_client::rpc_request::TokenAccountsFilter;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::{EncodableKey, Signer};
 use solana_sdk::transaction::{Transaction, VersionedTransaction};
 use tokio::sync::RwLock;
 
+use crate::constants::PUMP_FUN_PROGRAM;
 use crate::jito::{make_searcher_client, SearcherClient};
 use crate::util::{env, get_jito_tip_pubkey};
 
@@ -92,7 +96,62 @@ impl WalletManager {
         Ok(())
     }
 
-    pub async fn balances(
+    pub async fn token_balances(&self) {
+        use std::collections::HashMap;
+
+        let balances = self._balances().await.unwrap();
+        let mut token_balances: HashMap<String, HashMap<Pubkey, String>> =
+            HashMap::new();
+
+        for (pubkey, balance) in balances {
+            info!("Wallet: {}, lamports: {}", pubkey, balance);
+            let token_accounts = self
+                .rpc_client
+                .get_token_accounts_by_owner(
+                    &pubkey,
+                    TokenAccountsFilter::ProgramId(spl_token::id()),
+                )
+                .await
+                .unwrap();
+            for token_account in token_accounts {
+                let data = token_account.account.data;
+                if let UiAccountData::Json(parsed_account) = data {
+                    let mint = parsed_account.parsed["info"]
+                        .as_object()
+                        .expect("info")["mint"]
+                        .as_str()
+                        .unwrap()
+                        .to_string();
+                    let amount = parsed_account.parsed["info"]
+                        .as_object()
+                        .expect("info")["tokenAmount"]
+                        .as_object()
+                        .expect("tokenAmount")["amount"]
+                        .as_str()
+                        .unwrap()
+                        .to_string();
+                    token_balances
+                        .entry(mint)
+                        .or_insert_with(HashMap::new)
+                        .insert(pubkey, amount);
+                }
+            }
+        }
+
+        for (mint, wallet_balances) in token_balances {
+            info!("Mint: {}", mint);
+            for (wallet, balance) in wallet_balances {
+                info!("  Wallet: {}, Balance: {}", wallet, balance);
+            }
+        }
+    }
+
+    pub async fn balances(&self) {
+        let balances = self._balances().await.unwrap();
+        info!("Wallet balances: {:#?}", balances);
+    }
+
+    pub async fn _balances(
         &self,
     ) -> Result<Vec<(Pubkey, u64)>, Box<dyn std::error::Error>> {
         let balances = self
@@ -111,8 +170,6 @@ impl WalletManager {
             .collect::<Vec<_>>();
 
         let balances = join_all(balances).await;
-
-        info!("Wallet balances: {:#?}", balances);
         Ok(balances)
     }
 
@@ -121,7 +178,7 @@ impl WalletManager {
         amount: u64,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if self
-            .balances()
+            ._balances()
             .await?
             .iter()
             .all(|(_, balance)| *balance >= amount)

@@ -7,6 +7,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::{
+    hash::Hash,
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
     signature::Keypair,
@@ -14,6 +15,7 @@ use solana_sdk::{
     system_instruction::transfer,
     transaction::{Transaction, VersionedTransaction},
 };
+use std::error::Error;
 use std::str::FromStr;
 
 use crate::{
@@ -22,8 +24,8 @@ use crate::{
         PUMP_FUN_PROGRAM, PUMP_GLOBAL_ADDRESS, RENT_PROGRAM,
         SYSTEM_PROGRAM_ID, TOKEN_PROGRAM,
     },
-    jito,
-    pump::get_token_amount,
+    jito::{self, send_jito_tx, SearcherClient},
+    pump::{get_bonding_curve, get_token_amount, BondingCurveLayout},
     util::{env, get_jito_tip_pubkey},
     wallet::WalletManager,
 };
@@ -100,7 +102,7 @@ impl PumpCreateTokenIx {
 pub async fn push_image_to_ipfs(
     client: &Client,
     image: Vec<u8>,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, Box<dyn Error>> {
     let form = reqwest::multipart::Form::new()
         .part("file", reqwest::multipart::Part::bytes(image));
 
@@ -118,7 +120,7 @@ pub async fn push_image_to_ipfs(
 pub async fn push_meta_onto_ipfs(
     client: &Client,
     ipfs_meta: &IPFSMetaForm,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, Box<dyn Error>> {
     let data = serde_json::to_vec(ipfs_meta)?;
     let form = reqwest::multipart::Form::new()
         .part("file", reqwest::multipart::Part::bytes(data));
@@ -138,7 +140,7 @@ pub async fn push_meta_to_pump_ipfs(
     client: &Client,
     ipfs_meta: &IPFSMetaForm,
     image: Vec<u8>,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, Box<dyn Error>> {
     let form = reqwest::multipart::Form::new()
         .text("name", ipfs_meta.name.clone())
         .text("symbol", ipfs_meta.symbol.clone())
@@ -193,6 +195,117 @@ impl PoolState {
             virtual_token_reserves: DEFAULT_TOKEN_INITIAL_RESERVES,
         }
     }
+
+    pub fn from_layout(
+        mint: Pubkey,
+        bonding_curve: Pubkey,
+        associated_bonding_curve: Pubkey,
+        layout: &BondingCurveLayout,
+    ) -> Self {
+        Self {
+            mint,
+            bonding_curve,
+            associated_bonding_curve,
+            virtual_sol_reserves: layout.virtual_sol_reserves,
+            virtual_token_reserves: layout.virtual_token_reserves,
+        }
+    }
+}
+
+pub async fn fetch_pool_state(
+    rpc_client: &RpcClient,
+    mint: &Pubkey,
+) -> Result<PoolState, Box<dyn Error>> {
+    let (bonding_curve, associated_bonding_curve) = get_bc_and_abc(*mint);
+    let layout = get_bonding_curve(rpc_client, bonding_curve).await?;
+    #[cfg(test)]
+    {
+        info!("layout: {:#?}", layout);
+    }
+    Ok(PoolState::from_layout(
+        *mint,
+        bonding_curve,
+        associated_bonding_curve,
+        &layout,
+    ))
+}
+
+async fn ladder_buys(
+    mint: Pubkey,
+    pool_state: &mut PoolState,
+    wallet_manager: &WalletManager,
+    snipe_buy: u64,
+    latest_blockhash: Hash,
+    searcher_client: &mut SearcherClient,
+) -> Result<(), Box<dyn Error>> {
+    // let mut first_buy_bundle = vec![];
+    // let mut second_buy_bundle = vec![];
+    for (i, wallet) in wallet_manager.wallets.iter().enumerate() {
+        let lamports_amount = jittered_lamports_amount(snipe_buy);
+        let token_amount = get_token_amount(
+            pool_state.virtual_sol_reserves,
+            pool_state.virtual_token_reserves,
+            None,
+            lamports_amount,
+        )?;
+        let mut ixs = _make_buy_ixs(
+            wallet.pubkey(),
+            mint,
+            pool_state.bonding_curve,
+            pool_state.associated_bonding_curve,
+            token_amount,
+            apply_fee(lamports_amount),
+        )?;
+        // if i == 4 || i == 9 {
+        //     ixs.push(transfer(
+        //         &wallet.pubkey(),
+        //         &get_jito_tip_pubkey(),
+        //         25000,
+        //     ));
+        // }
+        let buy_tx = Transaction::new_signed_with_payer(
+            &ixs,
+            Some(&wallet.pubkey()),
+            &[wallet],
+            latest_blockhash,
+        );
+        pool_state.virtual_sol_reserves += lamports_amount;
+        pool_state.virtual_token_reserves -= token_amount;
+
+        send_jito_tx(buy_tx).await?;
+
+        // if i < 5 {
+        //     first_buy_bundle.push(buy_tx.clone());
+        // } else if i < 10 {
+        //     second_buy_bundle.push(buy_tx.clone());
+        // } else {
+        //     break;
+        // }
+    }
+
+    #[cfg(feature = "dry-run")]
+    {
+        info!("first_buy_bundle: {:#?}", first_buy_bundle);
+        info!("second_buy_bundle: {:#?}", second_buy_bundle);
+        return Ok(());
+    }
+
+    // #[cfg(not(feature = "dry-run"))]
+    // {
+    //     tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+
+    //     info!(
+    //         "{:?}",
+    //         send_bundle_no_wait(&first_buy_bundle, searcher_client).await?
+    //     );
+
+    //     info!(
+    //         "{:?}",
+    //         send_bundle_no_wait(&second_buy_bundle, searcher_client).await?
+    //     );
+    // }
+
+    Ok(())
 }
 
 pub async fn launch(
@@ -202,12 +315,12 @@ pub async fn launch(
     dev_buy: Option<u64>, // lamports
     wallet_manager: Option<&WalletManager>,
     snipe_buy: Option<u64>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn Error>> {
     if wallet_manager.is_some() && snipe_buy.is_none() {
         return Err("snipe_buy must be set if wallet_manager is set".into());
     }
     if let Some(wallet_manager) = wallet_manager {
-        let balances = wallet_manager.balances().await?;
+        let balances = wallet_manager._balances().await?;
         if !balances
             .iter()
             .all(|(_, balance)| *balance >= snipe_buy.unwrap() + 50000)
@@ -283,7 +396,7 @@ pub async fn launch(
             latest_blockhash,
         ));
 
-    #[cfg(feature = "dry-run")]
+    #[cfg(test)]
     {
         info!("create_tx: {:#?}", create_tx);
     }
@@ -299,75 +412,15 @@ pub async fn launch(
     };
 
     if let Some(wallet_manager) = wallet_manager {
-        let mut first_buy_bundle = vec![];
-        let mut second_buy_bundle = vec![];
-        for (i, wallet) in wallet_manager.wallets.iter().enumerate() {
-            let lamports_amount =
-                jittered_lamports_amount(snipe_buy.unwrap());
-            let token_amount = get_token_amount(
-                pool_state.virtual_sol_reserves,
-                pool_state.virtual_token_reserves,
-                None,
-                lamports_amount,
-            )?;
-            let mut ixs = _make_buy_ixs(
-                wallet.pubkey(),
-                mint,
-                bonding_curve,
-                associated_bonding_curve,
-                token_amount * 90 / 100,
-                apply_fee(lamports_amount),
-            )?;
-            if i == 4 || i == 9 {
-                ixs.push(transfer(
-                    &wallet.pubkey(),
-                    &get_jito_tip_pubkey(),
-                    25000,
-                ));
-            }
-            let buy_tx = VersionedTransaction::from(
-                Transaction::new_signed_with_payer(
-                    &ixs,
-                    Some(&wallet.pubkey()),
-                    &[wallet],
-                    latest_blockhash,
-                ),
-            );
-            pool_state.virtual_sol_reserves += lamports_amount;
-            pool_state.virtual_token_reserves -= token_amount;
-            if i < 5 {
-                first_buy_bundle.push(buy_tx.clone());
-            } else if i < 10 {
-                second_buy_bundle.push(buy_tx.clone());
-            } else {
-                break;
-            }
-        }
-
-        #[cfg(feature = "dry-run")]
-        {
-            info!("first_buy_bundle: {:#?}", first_buy_bundle);
-            info!("second_buy_bundle: {:#?}", second_buy_bundle);
-            return Ok(());
-        }
-
-        #[cfg(not(feature = "dry-run"))]
-        {
-            tokio::time::sleep(tokio::time::Duration::from_millis(2000))
-                .await;
-
-            info!(
-                "{:?}",
-                send_bundle_no_wait(&first_buy_bundle, &mut searcher_client)
-                    .await?
-            );
-
-            info!(
-                "{:?}",
-                send_bundle_no_wait(&second_buy_bundle, &mut searcher_client)
-                    .await?
-            );
-        }
+        ladder_buys(
+            mint,
+            &mut pool_state,
+            wallet_manager,
+            snipe_buy.unwrap(),
+            latest_blockhash,
+            &mut searcher_client,
+        )
+        .await?;
     }
 
     Ok(())
@@ -510,6 +563,7 @@ mod launcher_tests {
     use solana_sdk::signer::EncodableKey;
 
     use crate::util::{env, init_logger};
+    use crate::wallet::make_manager;
 
     use super::*;
 
@@ -641,5 +695,43 @@ mod launcher_tests {
 
         let expected = "181ec828051c0777070000005343414d4d455205000000534148494c4300000068747470733a2f2f697066732e696f2f697066732f516d653662705461486a4c61666a3370645976634643416b364b6e3333636b645744454a78514454596339357546";
         assert_eq!(hex::encode(buffer), expected);
+    }
+
+    #[tokio::test]
+    async fn test_laddered_buy() {
+        dotenv::dotenv().ok();
+        std::env::set_var("RUST_LOG", "info");
+        init_logger().ok();
+
+        let rpc_url = env("RPC_URL");
+        let wallet_manager = make_manager().await.unwrap();
+
+        let mint =
+            Pubkey::from_str("6oW6wJbGEkrX7mdG4tZ5tdhKLkpaKzVx6SjLpPLppump")
+                .unwrap();
+        let mut pool_state =
+            fetch_pool_state(&wallet_manager.rpc_client, &mint)
+                .await
+                .unwrap();
+
+        let rpc_client = RpcClient::new(rpc_url);
+        let latest_blockhash =
+            rpc_client.get_latest_blockhash().await.unwrap();
+
+        let mut searcher_client = jito::make_searcher_client().await.unwrap();
+
+        ladder_buys(
+            mint,
+            &mut pool_state,
+            &wallet_manager,
+            1_000_000, // 0.001 SOL as snipe_buy amount
+            latest_blockhash,
+            &mut searcher_client,
+        )
+        .await
+        .unwrap();
+
+        // Add assertions here to verify the results of the laddered buy
+        // For example, you could check the updated pool state or wallet balances
     }
 }

@@ -1,4 +1,4 @@
-use crate::jito::{/*send_jito_tx,*/ subscribe_tips, SearcherClient};
+use crate::jito::{send_jito_tx, subscribe_tips, SearcherClient};
 use crate::pump::{self, PumpBuyRequest};
 use crate::slot::{make_deadline_ix, update_slot};
 use crate::util::{get_jito_tip_pubkey, make_compute_budget_ixs};

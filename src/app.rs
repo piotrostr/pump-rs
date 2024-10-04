@@ -15,6 +15,10 @@ pub struct Args {}
 
 #[derive(Debug, Parser)]
 pub enum Command {
+    WalletsFund {
+        #[arg(long)]
+        lamports: u64,
+    },
     BundleStatusListener {},
     Launch {
         #[arg(long)]
@@ -45,7 +49,10 @@ pub enum Command {
         snipe_buy: u64,
     },
     WalletsDrain {},
-    Wallets {},
+    Wallets {
+        #[arg(long, default_value = "false")]
+        token_balances: bool,
+    },
     LookForGeyser {},
     BundleStatus {
         #[arg(long)]

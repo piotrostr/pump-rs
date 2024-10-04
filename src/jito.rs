@@ -156,7 +156,10 @@ pub async fn send_jito_tx(
 
     let out = res.json::<serde_json::Value>().await?;
 
-    info!("{}", out);
+    info!(
+        "{}",
+        out["result"].as_str().unwrap_or(out.to_string().as_str())
+    );
     Ok(())
 }
 

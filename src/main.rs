@@ -23,7 +23,6 @@ use pump_rs::snipe_portal;
 use pump_rs::util::init_logger;
 use pump_rs::util::parse_holding;
 use pump_rs::wallet::make_manager;
-use pump_rs::wallet::wait_token_balance;
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_client::rpc_config::RpcTransactionConfig;
 use solana_client::rpc_request::TokenAccountsFilter;
@@ -60,6 +59,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
     match app.command {
+        Command::WalletsFund { lamports } => {
+            let wallet_manager = make_manager().await?;
+            wallet_manager.fund_idempotent(lamports).await?;
+        }
         Command::BundleStatusListener {} => {
             let searcher_client = make_searcher_client().await?;
             start_bundle_results_listener(Arc::new(Mutex::new(
@@ -105,9 +108,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let manager = make_manager().await?;
             manager.drain().await?;
         }
-        Command::Wallets {} => {
+        Command::Wallets { token_balances } => {
             let manager = make_manager().await?;
-            manager.balances().await?;
+            if token_balances {
+                manager.token_balances().await;
+            } else {
+                manager.balances().await;
+            }
         }
         Command::LookForGeyser {} => {
             look_for_rpc_nodes().await;
@@ -571,6 +578,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 }
                             }
                         } else {
+                            info!("bonding curve: {:#?}", bonding_curve);
                             let token_amount = get_token_amount(
                                 bonding_curve.virtual_sol_reserves,
                                 bonding_curve.virtual_token_reserves,
