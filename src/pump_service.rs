@@ -1,4 +1,4 @@
-use crate::jito::{send_jito_tx, subscribe_tips, SearcherClient};
+use crate::jito::{/*send_jito_tx*/ subscribe_tips, SearcherClient};
 use crate::pump::{self, PumpBuyRequest};
 use crate::slot::{make_deadline_ix, update_slot};
 use crate::util::{get_jito_tip_pubkey, make_compute_budget_ixs};
@@ -127,14 +127,14 @@ pub async fn handle_pump_buy_v2(
     let wallet = state.wallet.lock().await;
     let mut searcher_client = state.searcher_client.lock().await;
     let latest_blockhash = state.latest_blockhash.read().await;
-    let dynamic_tip = state.dynamic_tip.read().await;
+    // let dynamic_tip = state.dynamic_tip.read().await;
     let deadline = create_pump_token_event.slot + 1;
     let buy_config = BuyConfig {
         lamports: state.lamports,
         jitter: 1,
         num_tries: 1,
         deadline: Some(deadline),
-        tip: *dynamic_tip,
+        tip: 1_000_000,
     };
     _handle_pump_buy(
         buy_config,

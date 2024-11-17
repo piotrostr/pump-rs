@@ -214,14 +214,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
             info!("Sniping pump with {} lamports", lamports);
             snipe::snipe_pump(lamports).await?;
         }
-        Command::Analyze { wallet_path } => {
-            let keypair = Keypair::read_from_file(wallet_path)
-                .expect("Failed to read wallet");
+        Command::Analyze {
+            wallet_path,
+            address,
+        } => {
+            let pubkey = if let Some(wallet_path) = wallet_path {
+                let keypair = Keypair::read_from_file(wallet_path)
+                    .expect("Failed to read wallet");
+                keypair.pubkey()
+            } else if let Some(address) = address {
+                Pubkey::from_str(&address).expect("parse pubkey")
+            } else {
+                panic!("Either wallet path or address must be provided");
+            };
             let rpc_client =
                 Arc::new(RpcClient::new(env("RPC_URL").to_string()));
-            let sniper_signatures = rpc_client
-                .get_signatures_for_address(&keypair.pubkey())
-                .await?;
+            let sniper_signatures =
+                rpc_client.get_signatures_for_address(&pubkey).await?;
             let sniper_signatures: Arc<HashSet<String>> =
                 Arc::new(HashSet::from_iter(
                     sniper_signatures
@@ -234,7 +243,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             let token_accounts = rpc_client
                 .get_token_accounts_by_owner(
-                    &keypair.pubkey(),
+                    &pubkey,
                     TokenAccountsFilter::ProgramId(Pubkey::from_str(
                         TOKEN_PROGRAM,
                     )?),

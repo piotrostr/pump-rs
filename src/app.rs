@@ -88,7 +88,10 @@ pub enum Command {
     },
     Analyze {
         #[arg(long)]
-        wallet_path: String,
+        wallet_path: Option<String>,
+
+        #[arg(long)]
+        address: Option<String>,
     },
     Sanity {},
     CloseTokenAccounts {

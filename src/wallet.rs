@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use std::sync::Arc;
 
 use futures::future::join_all;
@@ -13,7 +12,6 @@ use solana_sdk::signer::{EncodableKey, Signer};
 use solana_sdk::transaction::{Transaction, VersionedTransaction};
 use tokio::sync::RwLock;
 
-use crate::constants::PUMP_FUN_PROGRAM;
 use crate::jito::{make_searcher_client, SearcherClient};
 use crate::util::{env, get_jito_tip_pubkey};
 
@@ -132,22 +130,23 @@ impl WalletManager {
                         .to_string();
                     token_balances
                         .entry(mint)
-                        .or_insert_with(HashMap::new)
+                        .or_default()
                         .insert(pubkey, amount);
                 }
             }
         }
 
         for (mint, wallet_balances) in token_balances {
-            info!("Mint: {}", mint);
+            println!("Mint: {}", mint);
             for (wallet, balance) in wallet_balances {
-                info!("  Wallet: {}, Balance: {}", wallet, balance);
+                println!("  {}: {}", wallet, balance);
             }
         }
     }
 
     pub async fn balances(&self) {
         let balances = self._balances().await.unwrap();
+        info!("Wallets directory: {}", self.wallet_directory);
         info!("Wallet balances: {:#?}", balances);
     }
 
