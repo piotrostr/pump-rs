@@ -28,7 +28,6 @@ use std::sync::Arc;
 
 pub async fn run_seller() -> Result<(), Box<dyn Error>> {
     let sold_cache = Arc::new(RwLock::new(HashMap::new()));
-    let tip = 200000;
     let latest_blockhash = Arc::new(RwLock::new(Hash::default()));
     let wallet = Arc::new(
         Keypair::read_from_file(env("FUND_KEYPAIR_PATH"))
@@ -105,7 +104,6 @@ pub async fn run_seller() -> Result<(), Box<dyn Error>> {
                         latest_blockhash,
                         pump_accounts,
                         token_amount,
-                        tip,
                     )
                     .await
                     .expect("sell pump token");

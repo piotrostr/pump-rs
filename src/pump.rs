@@ -456,7 +456,6 @@ pub async fn sell_pump_token(
     latest_blockhash: Hash,
     pump_accounts: PumpAccounts,
     token_amount: u64,
-    tip: u64,
 ) -> Result<(), Box<dyn Error>> {
     let owner = wallet.pubkey();
 
@@ -470,7 +469,7 @@ pub async fn sell_pump_token(
     let sell_ix = make_pump_sell_ix(owner, pump_accounts, token_amount, ata)?;
     ixs.append(&mut compute_budget_ixs);
     ixs.push(sell_ix);
-    ixs.push(transfer(&owner, &get_jito_tip_pubkey(), tip));
+    ixs.push(transfer(&owner, &get_jito_tip_pubkey(), 30_000));
 
     let tx = Transaction::new_signed_with_payer(
         &ixs,
@@ -807,7 +806,6 @@ pub async fn send_pump_bump(
             latest_blockhash,
             pump_accounts,
             token_amount,
-            tip,
         )
         .await?;
         return Ok(());

@@ -115,7 +115,7 @@ pub struct SwapInstructionsResponse {
     #[serde(rename = "tokenLedgerInstruction")]
     pub token_ledger_instruction: Option<InstructionData>,
     #[serde(rename = "computeBudgetInstructions")]
-    pub compute_budget_instructions: Vec<InstructionData>,
+    pub compute_budget_instructions: Option<Vec<InstructionData>>,
     #[serde(rename = "setupInstructions")]
     pub setup_instructions: Vec<InstructionData>,
     #[serde(rename = "swapInstruction")]
@@ -184,13 +184,16 @@ impl Jupiter {
         };
 
         let client = reqwest::Client::new();
-        let response = client
+        let raw_res = client
             .post("https://quote-api.jup.ag/v6/swap-instructions")
             .json(&swap_request)
             .send()
-            .await?
-            .json::<SwapInstructionsResponse>()
             .await?;
+        if !raw_res.status().is_success() {
+            let error = raw_res.text().await?;
+            return Err(error.into());
+        }
+        let response = raw_res.json::<SwapInstructionsResponse>().await?;
 
         let rpc_client = RpcClient::new(std::env::var("RPC_URL")?);
         let recent_blockhash = rpc_client.get_latest_blockhash().await?;
@@ -203,9 +206,12 @@ impl Jupiter {
                 .push(Self::convert_instruction_data(token_ledger_ix)?);
         }
 
-        // Add compute budget instructions
-        for ix_data in response.compute_budget_instructions {
-            instructions.push(Self::convert_instruction_data(ix_data)?);
+        if let Some(compute_budget_instructions) =
+            response.compute_budget_instructions
+        {
+            for ix_data in compute_budget_instructions {
+                instructions.push(Self::convert_instruction_data(ix_data)?);
+            }
         }
 
         // Add setup instructions

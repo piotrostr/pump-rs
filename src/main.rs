@@ -1,4 +1,5 @@
 use clap::Parser;
+use solana_account_decoder::UiAccountData;
 use {
     dialoguer::{theme::ColorfulTheme, Confirm},
     futures::StreamExt,
@@ -300,19 +301,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let pump_tokens =
                 pump::get_tokens_held_pump(&keypair.pubkey()).await?;
             info!("Tokens held: {}", pump_tokens.len());
-            let mut searcher_client = make_searcher_client().await?;
-            // poll for bundle results
-            let mut bundle_results_stream = searcher_client
-                .subscribe_bundle_results(SubscribeBundleResultsRequest {})
-                .await
-                .expect("subscribe bundle results")
-                .into_inner();
-            tokio::spawn(async move {
-                while let Some(res) = bundle_results_stream.next().await {
-                    info!("Received bundle result: {:?}", res);
-                }
-            });
-
             let token_accounts = rpc_client
                 .get_token_accounts_by_owner(
                     &keypair.pubkey(),
@@ -334,7 +322,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         rpc_client.get_latest_blockhash().await?,
                         pump_accounts,
                         holding.amount,
-                        50_000, // tip
                     )
                     .await?;
                     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -342,35 +329,79 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         Command::SweepJup { wallet_path } => {
-            let input_mint = "CsXcyKxgjRNHnFW54cq3JSWmFYssY3ptqKAZnumMpump";
             let keypair =
                 Keypair::read_from_file(wallet_path).expect("read wallet");
             let rpc_client = RpcClient::new(env("RPC_URL").to_string());
-            let ata =
-                spl_associated_token_account::get_associated_token_address(
+            let all_atas = rpc_client
+                .get_token_accounts_by_owner(
                     &keypair.pubkey(),
-                    &Pubkey::from_str(input_mint).unwrap(),
-                );
-            let balance = rpc_client
-                .get_token_account_balance(&ata)
-                .await?
-                .amount
-                .parse::<u64>()
-                .unwrap();
-            let slippage = 50u16; // 50 bps, 0.5%
-            let quote =
-                Jupiter::fetch_quote(input_mint, WSOL, balance, slippage)
-                    .await?;
-            println!("{:#?}", quote);
-            if Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt("Do you want to proceed?")
-                .default(false)
-                .show_default(true)
-                .wait_for_newline(true)
-                .interact()
-                .unwrap()
-            {
-                Jupiter::swap(quote, &keypair).await?;
+                    TokenAccountsFilter::ProgramId(
+                        Pubkey::from_str(TOKEN_PROGRAM).unwrap(),
+                    ),
+                )
+                .await?;
+
+            for acc in all_atas {
+                // Extract the mint address from the parsed data
+                let (mint, balance) =
+                    if let UiAccountData::Json(parsed) = &acc.account.data {
+                        if let serde_json::Value::Object(parsed_obj) =
+                            &parsed.parsed
+                        {
+                            if let Some(info) = parsed_obj.get("info") {
+                                if let Some(mint_str) =
+                                    info.get("mint").and_then(|m| m.as_str())
+                                {
+                                    // Get the amount directly instead of uiAmountString
+                                    if let Some(amount) = info
+                                        .get("tokenAmount")
+                                        .and_then(|ta| ta.get("amount"))
+                                        .and_then(|a| a.as_str())
+                                    {
+                                        match amount.parse::<u64>() {
+                                            Ok(parsed_amount) => (
+                                                mint_str.to_string(),
+                                                parsed_amount,
+                                            ),
+                                            Err(_) => continue, // Skip if parsing fails
+                                        }
+                                    } else {
+                                        continue; // Skip if we can't get the amount
+                                    }
+                                } else {
+                                    continue; // Skip if we can't get the mint
+                                }
+                            } else {
+                                continue; // Skip if we can't get the info
+                            }
+                        } else {
+                            continue; // Skip if parsed is not an object
+                        }
+                    } else {
+                        continue; // Skip if data is not JSON
+                    };
+
+                if balance == 0 {
+                    info!("Skipping {} because balance is 0", mint);
+                    continue; // Skip if balance is 0
+                }
+
+                let slippage = 50u16; // 50 bps, 0.5%
+                let quote =
+                    Jupiter::fetch_quote(&mint, WSOL, balance, slippage)
+                        .await?;
+                println!("Quote for {}: {:#?}", mint, quote);
+
+                if Confirm::with_theme(&ColorfulTheme::default())
+                    .with_prompt(format!("Sell {} tokens?", mint))
+                    .default(false)
+                    .show_default(true)
+                    .wait_for_newline(true)
+                    .interact()
+                    .unwrap()
+                {
+                    Jupiter::swap(quote, &keypair).await?;
+                }
             }
         }
         Command::SwapMode { lamports, sell } => {
@@ -421,7 +452,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 latest_blockhash,
                                 pump_accounts,
                                 token_amount,
-                                tip,
                             )
                             .await
                             {
