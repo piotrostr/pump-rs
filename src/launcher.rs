@@ -1,7 +1,7 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use borsh::{BorshDeserialize, BorshSerialize};
 use jito_searcher_client::send_bundle_no_wait;
-use log::{debug, info};
+use log::debug;
 use rand::Rng;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -220,7 +220,7 @@ pub async fn fetch_pool_state(
     let layout = get_bonding_curve(rpc_client, bonding_curve).await?;
     #[cfg(test)]
     {
-        info!("layout: {:#?}", layout);
+        debug!("layout: {:#?}", layout);
     }
     Ok(PoolState::from_layout(
         *mint,
@@ -236,11 +236,11 @@ async fn ladder_buys(
     wallet_manager: &WalletManager,
     snipe_buy: u64,
     latest_blockhash: Hash,
-    searcher_client: &mut SearcherClient,
+    _searcher_client: &mut SearcherClient,
 ) -> Result<(), Box<dyn Error>> {
     // let mut first_buy_bundle = vec![];
     // let mut second_buy_bundle = vec![];
-    for (i, wallet) in wallet_manager.wallets.iter().enumerate() {
+    for wallet in wallet_manager.wallets.iter() {
         let lamports_amount = jittered_lamports_amount(snipe_buy);
         let token_amount = get_token_amount(
             pool_state.virtual_sol_reserves,
@@ -248,7 +248,7 @@ async fn ladder_buys(
             None,
             lamports_amount,
         )?;
-        let mut ixs = _make_buy_ixs(
+        let ixs = _make_buy_ixs(
             wallet.pubkey(),
             mint,
             pool_state.bonding_curve,
@@ -398,7 +398,7 @@ pub async fn launch(
 
     #[cfg(test)]
     {
-        info!("create_tx: {:#?}", create_tx);
+        debug!("create_tx: {:#?}", create_tx);
     }
 
     #[cfg(not(feature = "dry-run"))]

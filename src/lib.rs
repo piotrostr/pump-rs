@@ -1,3 +1,4 @@
+pub mod analyze;
 pub mod app;
 pub mod ata;
 pub mod bench;
