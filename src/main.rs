@@ -1,3 +1,4 @@
+use dialoguer::{theme::ColorfulTheme, Confirm};
 use futures::future::join_all;
 use futures::StreamExt;
 use jito_protos::searcher::SubscribeBundleResultsRequest;
@@ -5,11 +6,13 @@ use jito_searcher_client::get_searcher_client;
 use pump_rs::bench;
 use pump_rs::constants::PUMP_FUN_MINT_AUTHORITY;
 use pump_rs::constants::TOKEN_PROGRAM;
+use pump_rs::constants::WSOL;
 use pump_rs::data::look_for_rpc_nodes;
 use pump_rs::jito::get_bundle_status;
 use pump_rs::jito::make_searcher_client;
 use pump_rs::jito::start_bundle_results_listener;
 use pump_rs::jito::subscribe_tips;
+use pump_rs::jup::Jupiter;
 use pump_rs::launcher;
 use pump_rs::launcher::IPFSMetaForm;
 use pump_rs::pump::get_bonding_curve;
@@ -29,6 +32,7 @@ use solana_client::rpc_request::TokenAccountsFilter;
 use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::signature::Signature;
 use solana_transaction_status::UiTransactionEncoding;
+use spl_token::solana_program;
 use std::collections::HashSet;
 use std::{error::Error, str::FromStr, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
@@ -519,6 +523,38 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .await?;
                     tokio::time::sleep(Duration::from_millis(300)).await;
                 }
+            }
+        }
+        Command::SweepJup { wallet_path } => {
+            let input_mint = "65qvaqntUPPTd3LwXDSRVXXrn5ZuUzHZ3oC66Adupump";
+            let keypair =
+                Keypair::read_from_file(wallet_path).expect("read wallet");
+            let rpc_client = RpcClient::new(env("RPC_URL").to_string());
+            let ata =
+                spl_associated_token_account::get_associated_token_address(
+                    &keypair.pubkey(),
+                    &Pubkey::from_str(input_mint).unwrap(),
+                );
+            let balance = rpc_client
+                .get_token_account_balance(&ata)
+                .await?
+                .amount
+                .parse::<u64>()
+                .unwrap();
+            let slippage = 50u16; // 50 bps, 0.5%
+            let quote =
+                Jupiter::fetch_quote(input_mint, WSOL, balance, slippage)
+                    .await?;
+            println!("{:#?}", quote);
+            if Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt("Do you want to proceed?")
+                .default(false)
+                .show_default(true)
+                .wait_for_newline(true)
+                .interact()
+                .unwrap()
+            {
+                Jupiter::swap(quote, &keypair).await?;
             }
         }
         Command::SwapMode { lamports, sell } => {

@@ -15,6 +15,10 @@ pub struct Args {}
 
 #[derive(Debug, Parser)]
 pub enum Command {
+    SweepJup {
+        #[arg(long)]
+        wallet_path: String,
+    },
     WalletsFund {
         #[arg(long)]
         lamports: u64,

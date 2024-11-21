@@ -71,6 +71,7 @@ pub async fn close_all_atas(
                         rpc_client.get_latest_blockhash().await?,
                     ),
                 );
+                // rpc_client.send_transaction(&tx).await?;
                 send_bundle_no_wait(&[tx], searcher_client).await?;
             } else if burn_close {
                 info!("Burn-closing: {}", ata.pubkey);
