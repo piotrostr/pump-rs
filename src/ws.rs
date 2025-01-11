@@ -58,10 +58,9 @@ pub async fn _connect_to_websocket(
 
 pub async fn connect_to_jito_tip_websocket(
 ) -> Result<WebSocket<TokioIo<Upgraded>>, Box<dyn Error>> {
-    _connect_to_websocket_insecure(
-        "bundles-api-rest.jito.wtf".to_string(),
-        "http://bundles-api-rest.jito.wtf/api/v1/bundles/tip_stream"
-            .to_string(),
+    _connect_to_websocket(
+        "bundles.jito.wtf".to_string(),
+        "https://bundles.jito.wtf/api/v1/bundles/tip_stream".to_string(),
     )
     .await
 }
